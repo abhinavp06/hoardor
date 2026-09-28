@@ -26,3 +26,18 @@
         2. AI/ML integration?
             1. Related to the point above 
 2. Player
+    1. Basic functions
+        1. Play/Pause
+        2. Volume Slider
+        3. Volume Booster
+        4. Lyrics
+        5. Fwd/Back 10s/5s (customizable?)
+        6. Loop
+        7. Queue
+        8. Playback Speed
+        9. Shuffle
+        10. Add to Playlist button
+        11. Remove from Playlist button
+    2. Mini graphics engine
+        1. Like Windows Media Player
+        2. Creativity required
