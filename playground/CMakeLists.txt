@@ -1,0 +1,1 @@
+set(HOARDOR_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/output/")
