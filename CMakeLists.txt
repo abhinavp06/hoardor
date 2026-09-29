@@ -28,7 +28,8 @@ option(RUN_TESTS_AFTER_BUILD "Run unit tests after a successful build" ON)
 # -----------------------------------------------------------------------------
 
 add_library (hoardor
-
+    # FILE ENGINE
+    src/file/file_engine.cpp
 )
 
 target_include_directories(hoardor
