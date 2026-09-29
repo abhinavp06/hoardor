@@ -1,8 +1,8 @@
 *.exe
 /.vs
-*/build
-*/out
-*/output/*
+/build
+/out
+/output/*
 !/output/.gitkeep
 *.wav
 *.lib
