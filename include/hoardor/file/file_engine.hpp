@@ -5,20 +5,23 @@
 #include <filesystem>
 #include <vector>
 
-enum class MediaType { Music, Podcast, Movie, Show,  };
+namespace hoardor::file {
 
-enum class FileType { Audio, Video, Text };
+    enum class MediaType { Music, Podcast, Movie, Show,  };
 
-struct FileEntry {
-   std::filesystem::path relative_path;
-   std::uintmax_t size = 0;
-   std::filesystem::file_time_type mtime{};
-};
+    enum class FileType { Audio, Video, Text };
 
-struct File {
-    public:
-        std::string id;
-        FileType file_type;
-};
+    struct FileEntry {
+       std::filesystem::path relative_path;
+       std::uintmax_t size = 0;
+       std::filesystem::file_time_type mtime{};
+    };
 
-std::vector<FileEntry> discover(const std::filesystem::path& root, MediaType media_type); // ask user to explicitly state the video/audio directories
+    struct File {
+        public:
+            std::string id;
+            FileType file_type;
+    };
+
+    std::vector<FileEntry> discover(const std::filesystem::path& root, MediaType media_type); // ask user to explicitly state the video/audio directories
+}
