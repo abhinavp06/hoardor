@@ -14,7 +14,7 @@ namespace hoardor::file {
     struct FileEntry {
        std::filesystem::path relative_path;
        std::uintmax_t size = 0;
-       std::filesystem::file_time_type mtime{};
+       std::filesystem::file_time_type last_modified{};
     };
 
     struct File {
