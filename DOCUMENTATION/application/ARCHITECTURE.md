@@ -22,19 +22,23 @@ Rationale:
 
 hoardor is divided into engines, each in its own namespace with its own rules:
 
-- `file`: library roots, scanning, realtime watching, and change detection.
+- `file`: library roots and their identity, on-demand scanning, change detection, and resolving files to paths.
 - `audio`, `video`, `graphics`, `text`: planned.
 - `master`: orchestrates the other engines.
 - `db`: **infrastructure, not a feature engine**. See §3.
+- `core`: **infrastructure, not a feature engine**. Shared building blocks such as an event bus, ring buffers, and queues. Plain standard C++ with no third-party dependencies. See below.
 
-**Communication:** engines never call each other directly. An engine publishes events (for example `file::FileAdded`), and the master engine routes them to whichever engines care. This keeps engines independently testable and fits the planned agent-per-engine setup, which will be designed after the first draft.
+**Communication:** engines never call each other directly. The master engine coordinates them. Until an event bus exists, an engine hands its results to the caller with plain return values, pull-style iterators, or callbacks, and `master` passes them on to whichever engines care. Once an event bus exists (in `core`), engines publish events (for example `file::FileAdded`) and `master` routes them. Either way, engines stay independently testable, which fits the planned agent-per-engine setup that will be designed after the first draft.
+
+**`core` is built on demand (Decided, 2026-10-01).** Infrastructure is added to `hoardor::core` only when a concrete feature needs it, and that feature is its first consumer. Nothing goes into `core` speculatively. Each addition gets a decision-log row naming the feature that required it. With on-demand scanning, no planned feature needs an event bus yet, so none is assumed.
 
 ## 3. Persistence (Decided)
 
 - **One SQLite database file** for the whole library. Cross-engine joins (a track joined to its file) and atomic multi-engine transactions stay possible.
 - **`hoardor::db` owns the mechanics:** connections, the pragmas (WAL mode), a single writer thread plus reader connections, prepared-statement caching, transactions, and running migrations.
 - **Each engine owns its own data:** its tables (prefixed `<engine>_`, e.g. `file_*`), its migrations, and its repository class (e.g. `file::Repository`) built on `db`. A central "DB engine" that implements every engine's repository was rejected. It would become a god-module and break per-engine ownership.
-- **Writes are batched in transactions.** One transaction per batch is orders of magnitude faster than autocommit on every row.
+- **Writes are batched in transactions.** One transaction per batch is orders of magnitude faster than autocommit on every row. Background batches stay short (about 50 ms), so the user's own writes (play counts, ratings) are never blocked noticeably.
+- **The database lives on the machine's internal storage** (the app-data folder), never on a media drive. Media drives come and go, and SQLite's WAL mode doesn't work on network file systems.
 - **Tests run against real in-memory SQLite (`:memory:`).** Don't abstract repositories behind interfaces until a second implementation exists.
 
 ## 4. Memory (Decided)
@@ -45,20 +49,24 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
 
 - Targets are Windows (the user's main OS), Linux, and macOS. Development happens on a Linux VM, so Linux backends are built and tested first, then Windows, then macOS.
 - OS-specific code sits behind an interface in `src/<engine>/platform/`.
-- CI (GitHub Actions) builds and tests on all three OSes, because only Linux can run locally.
+- CI (GitHub Actions) will build and test on all three OSes, because only Linux can run locally. It is deferred for now (decision log, 2026-10-01).
 - Portability rules:
   - Store paths as UTF-8 everywhere.
   - Windows and macOS file systems are usually case-insensitive.
   - Windows needs long-path (>260 characters) support.
   - Volumes come and go.
 
-## 6. File engine principles (Decided; details in `engines/file_engine.md`)
+## 6. File engine principles (Decided unless marked; details in `engines/file_engine.md`)
 
-- **Each OS gets its own native watcher:** `inotify` on Linux, `ReadDirectoryChangesW` on Windows, and `FSEvents` on macOS.
-- **The watcher is a hint, and the reconciliation scan is the truth.** Every OS mechanism can drop events (queue or buffer overflow, coalescing). A stat-only scan compares path, size, and mtime against the database. It runs on startup, after any lost events, on an interval, and on demand.
-- **An unavailable root is OFFLINE, never "everything deleted".** The library sits on external drives. Identify roots by volume ID as well as path, because drive letters change.
-- **Files must settle before they are reported**, so a copy in progress isn't treated as a series of modifications.
-- **Parallelism is per physical device, not per CPU core.** Concurrent reads on a spinning HDD thrash the disk head.
+- **Scanning is on demand, through Sync (Decided, 2026-10-01).** The user configures categories (Music, Movies, …) and assigns directories (roots) to each. A **Sync** of one category, which is a UI section, scans all of that category's roots. A global Sync scans every root. There are no folder-level scans. A startup sync is an opt-in setting. Every sync runs in the background, so startup never waits for it. A sync on drive plug-in comes later. Realtime watching is deferred. If it's ever added, it is only a hint that triggers a sync.
+- **The scan is the truth.** A stat-only scan compares path, size, and mtime against the database.
+- **Storage-agnostic roots.** A library root is any folder: an external HDD, RAID, a NAS share, or a local disk. Files are stored relative to their root, so a root's location can change (a new drive letter, or a migration to RAID) without losing entries.
+- **Root identity doesn't depend on location.** It comes from a `.hoardor-root` marker file in the root (Decided; opt-out, skipped on read-only storage), a volume ID as fallback, and the last-known path as a hint. Drive letters and mount names change, and a different drive can take over an old letter.
+- **An unavailable root is OFFLINE, never "everything deleted".** Removals are applied only after a complete scan of a verified root. An empty root that has known entries counts as unmounted. A mass-removal guard holds large removals for confirmation.
+- **Browsing never touches media drives.** The library is browsed from SQLite, so sleeping or unplugged drives are never spun up just to show the UI.
+- **hoardor never writes to media storage**, apart from the optional root marker.
+- **Files being copied are not trusted.** A file modified within a configurable settle window is stored as unsettled, and metadata engines skip it until a later scan.
+- **Parallelism is per physical device, not per CPU core.** Concurrent reads on a spinning HDD thrash the disk head. Scan concurrency is configurable per volume: 1 for an HDD, more for an SSD, RAID, or NAS.
 - **Never hash whole files.** A partial fingerprint (size plus the first and last N KiB) is used only to detect moves and renames.
 - **Category is configuration on a library root**, not a fixed list in code. Examples are Music, Podcast, Movie, Show, Book, and Blog. The file engine only classifies files by *kind* (audio, video, text, image, subtitle) through a configurable map of file extensions.
 
@@ -68,7 +76,6 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
 - Google Benchmark will be added for hot paths.
 - Proposed targets, to be validated by benchmarks. The current library has thousands of files: about 1 TB of music and about 5 TB of other media.
   - Incremental reconciliation of about 50k files: under 1 s with a warm OS cache, a few seconds on a cold HDD.
-  - Change on disk to database row, after the file settles: under about 200 ms.
   - Memory stays flat regardless of library size.
 
 ## Decision log
@@ -80,3 +87,15 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
 | 2026-10-01 | Native watchers on each OS, with a reconciliation scan as the source of truth. Unavailable roots are marked offline. |
 | 2026-10-01 | Tests use GoogleTest. Benchmarks will use Google Benchmark. |
 | 2026-10-01 | Media category is configuration on a library root. Text has subcategories (Books, Blogs, …). |
+| 2026-10-01 | A `core` engine (`hoardor::core`) holds shared infrastructure (event bus, ring buffers, …). Each component is added only when a feature needs it. Until an event bus exists, engines return results to the caller and `master` passes them on. |
+| 2026-10-01 | `db` stays its own infrastructure namespace (`hoardor::db`) and does not move under `core`. `core` stays plain standard C++ with no dependencies, while `db` brings in SQLite. |
+| 2026-10-01 | CI is deferred. Windows and macOS behavior is verified by hand until it is added. |
+| 2026-10-01 | Scanning is on demand (startup, user request, later drive arrival). Realtime watching is deferred. This supersedes the earlier "native watchers on each OS" decision. The reconciliation scan remains the source of truth. |
+| 2026-10-01 | Library roots are storage-agnostic (external HDD, RAID, NAS). Files are stored relative to their root, root identity doesn't depend on location, and offline-safety rules guard removals. The marker-file identity is still Proposed. |
+| 2026-10-01 | The SQLite database lives on internal storage, never on a media drive. |
+| 2026-10-01 | The user-facing scan action is **Sync**: `sync(category)` for one UI section, `sync()` for everything. A category can have several roots. Folder-level scans are dropped as unnecessary. |
+| 2026-10-01 | Root identity uses a `.hoardor-root` marker file. The name stays hoardor's, because hoardor must not depend on or know about TYLI. |
+| 2026-10-01 | Sync always runs in the background. A startup sync is a setting (default off). *Proposed, pending the user's review:* engine calls like `sync()` stay blocking, and the caller (TYLI, or a future daemon) owns the thread. hoardor owns no threads for now. |
+| 2026-10-01 | The mass-removal guard defaults to 25% of a root's entries and is configurable. |
+| 2026-10-01 | *Proposed, pending the user's review, and replacing the caller-owns-the-thread proposal above:* hoardor owns background execution. Engine functions like `file::sync()` stay blocking and thread-agnostic. The `master` engine runs them on a hoardor-owned worker and enforces one sync per root, cancellation, I/O priority, and yielding to playback. Callbacks arrive on hoardor's thread. |
+| 2026-10-01 | The file engine starts with scanning only (phase 1: streaming scanner and configurable extension-to-kind map). Roots and persistence, move detection, and platform volume support follow in later phases. See `engines/file_engine.md`. |

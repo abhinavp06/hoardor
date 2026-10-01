@@ -15,7 +15,7 @@ Build a single, snappy, low-memory, fully offline home for the user's whole medi
 Do this at the start of every session, before proposing or changing anything. Each step adds context the next step depends on.
 
 1. **`CLAUDE.md` + `DOCUMENTATION/application/ARCHITECTURE.md`** load automatically. They define *how* we build: rules, conventions, and decisions.
-2. **`DOCUMENTATION/CHANGELOG.md`** covers *where we are*. Read `[Unreleased]` and the most recent entries in full, so you know what was done last, the open follow-ups, and the known limitations. Search older entries when the history of a specific area matters.
+2. **`DOCUMENTATION/CHANGELOGS/`** covers *where we are*. Read `unreleased.md` in full, and the newest `v*.md` file (find it in the index in `README.md`), so you know what was done last, the open follow-ups, and the known limitations. Search older version files when the history of a specific area matters.
 3. **`git status` and `git log --oneline -15`** show the current branch and any uncommitted work that the changelog doesn't capture yet.
 4. **`DOCUMENTATION/application/engines/<engine>.md`** gives *what we're building* for the engine involved in the task: its goals, API, schema, edge cases, and PR phases. If the task spans engines, read every engine doc involved.
 5. **`include/hoardor/<engine>/`** is the public API contract for that engine. Read it before the implementation.
@@ -41,7 +41,11 @@ src/<engine>/                 # implementations (.cpp). Platform backends live i
 tests/<engine>/               # GoogleTest suite. Thorough and edge-case driven
 playground/<engine>/          # throwaway manual experiments. Anything goes here
 DOCUMENTATION/
-  CHANGELOG.md                # detailed changelog. See "Changelog" below
+  CHANGELOGS/                 # detailed changelog, one file per version. See "Living documentation" below
+    README.md                 # index of versions, versioning rules, how to cut a version, entry template
+    unreleased.md             # finished work not yet in a version (new entries go here)
+    v<x.y.z>.md               # one frozen file per version
+    baseline.md               # project state before the changelog existed
   notes/                      # the user's PERSONAL notes. Read only when asked. Never edit
   application/
     ARCHITECTURE.md           # system-wide architecture and decision log
@@ -62,7 +66,8 @@ Build options in the root `CMakeLists.txt`: `BUILD_PLAYGROUND`, `BUILD_TESTS`, `
 
 - Each engine has its own namespace: `hoardor::<engine>` (for example `hoardor::file`, `hoardor::db`). Use `#pragma once`.
 - Types and enum values use `PascalCase`. Functions, variables, members, and file names use `snake_case`. Headers use `.hpp` and sources use `.cpp`.
-- Engines never call each other directly. They publish events, and the master engine routes them.
+- Engines never call each other directly. The master engine coordinates them. Until `core` has an event bus, engines return results to the caller (return values, `next()`-style iterators, callbacks).
+- `hoardor::core` holds shared infrastructure (event bus, ring buffers, …). Add to it only when a concrete feature needs it, never speculatively.
 - Each engine owns its SQLite tables (prefixed `<engine>_`) and its repository. `hoardor::db` provides only the mechanics.
 - Store paths as UTF-8 at every boundary (the database, events, the public API).
 - Match the style of the surrounding code. Keep comments for the *why*, not the *what*.
@@ -80,7 +85,7 @@ Build options in the root `CMakeLists.txt`: `BUILD_PLAYGROUND`, `BUILD_TESTS`, `
 
 - [ ] The build passes, and `ctest` passes on Linux.
 - [ ] New or changed behavior has edge-case tests.
-- [ ] `DOCUMENTATION/CHANGELOG.md` has a complete entry (see below).
+- [ ] `DOCUMENTATION/CHANGELOGS/unreleased.md` has a complete entry (see below).
 - [ ] `DOCUMENTATION/application/engines/<engine>.md` matches what was actually built.
 - [ ] `DOCUMENTATION/application/ARCHITECTURE.md` reflects any system-wide decision, including a new decision-log row.
 
@@ -88,7 +93,7 @@ Build options in the root `CMakeLists.txt`: `BUILD_PLAYGROUND`, `BUILD_TESTS`, `
 
 These files are the project's memory. The user relies on them for context later, so treat them as part of the deliverable, not an afterthought.
 
-- **`DOCUMENTATION/CHANGELOG.md` is critical. History matters.** Update it after every completed feature, and whenever the user asks for a PR. Use the entry template at the top of the file. Each entry includes:
+- **`DOCUMENTATION/CHANGELOGS/` is critical. History matters.** Add an entry to `unreleased.md` after every completed feature, and whenever the user asks for a PR. Use the entry template in `CHANGELOGS/README.md`. When a version is cut, follow "Cutting a version" in that README: entries move unchanged into `v<version>.md`, and the root `CMakeLists.txt` version must match. Each entry includes:
   - what changed and why
   - design decisions and the alternatives rejected
   - every file touched
@@ -96,6 +101,6 @@ These files are the project's memory. The user relies on them for context later,
   - performance results
   - known limitations and follow-ups
 
-  Be thorough. A future reader with no other context should understand the change. New work goes under `## [Unreleased]` until a version is cut. Never rewrite or delete past entries. If something was wrong, add a correcting entry.
+  Be thorough. A future reader with no other context should understand the change. New work goes in `unreleased.md` until a version is cut. Never rewrite or delete past entries, and never edit a version file once it's cut. If something was wrong, add a correcting entry.
 - **`DOCUMENTATION/application/ARCHITECTURE.md`**: update it whenever a system-wide decision is made or changed, and add a dated row to its decision log.
 - **`DOCUMENTATION/application/engines/<engine>.md`**: update it whenever the engine's design, API, schema, edge cases, or phase plan changes. Implementation often reveals changes, so record them as they happen, so the doc never drifts from the code.
