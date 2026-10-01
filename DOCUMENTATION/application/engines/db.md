@@ -1,6 +1,6 @@
 # DB engine (`hoardor::db`)
 
-Status: **Decided** (2026-10-01). It's built as part of File Sync v1, phase 2.
+Status: **Built** (2026-10-01) as part of File Sync v1, phase 2. 12 tests in `tests/db/database_test.cpp`. The default page cache (2 MB) is kept: 8 and 16 MB made no measurable difference in the sync benchmark.
 
 `db` is infrastructure, not a feature engine (ARCHITECTURE §3). It provides the *mechanics* of SQLite. Every engine owns its own tables, migrations, and queries.
 

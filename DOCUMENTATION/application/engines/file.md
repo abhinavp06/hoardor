@@ -116,18 +116,42 @@ Detecting the storage type automatically is possible on each OS, but USB enclosu
 
 ## 3. Current state
 
-File Sync v1 (`features/file_sync.md`) is in progress. Built so far (phase 1):
-- **`include/hoardor/file/settings.hpp`:**
-  - `FileKind`: Audio=1, Video=2, Text=3, Image=4, Subtitle=5. The numbers are stored in the database, so they are never renumbered.
-  - `to_string` and `file_kind_from_string`
-  - `Settings`: `extension_kinds`, `ignored_names`, `ignored_prefixes`, and `defaults()`
-  - `kind_of()`
-- **`include/hoardor/file/scanner.hpp`:** `Scanner` (`open`, `next`, `progress`), `ScannedFile`, `ScanError`, `ScanResult`, `ScanProgress`.
-- **Internal (`src/file/`):** `text.hpp` (UTF-8 conversion that never throws, ASCII case-folding, extension normalization) and `file_time.hpp` (exact mtime ↔ Unix nanoseconds).
+As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANNER_INIT`, ships in `v0.1.0`).
 
-Still to come with phase 2:
-- **Tables:** `file_*`, designed in File Sync phase 2.
-- **Settings:** every field of `file::Settings` and its default.
+**Public headers (`include/hoardor/file/`):**
+
+| Header | Contents |
+|---|---|
+| `settings.hpp` | `FileKind` (Audio=1, Video=2, Text=3, Image=4, Subtitle=5, stored in the database, so never renumbered), `to_string`, `file_kind_from_string`, `Settings` (every tunable, `defaults()`), `kind_of()` |
+| `scanner.hpp` | `Scanner` (`open`, `next`, `progress`), `ScannedFile`, `ScanError`, `ScanResult`, `ScanProgress` |
+| `library.hpp` | `Library` (settings, categories, roots, sync, paging, `resolve`), `Category`, `Root`, `RootStatus`, `Entry`, `ScanErrorRecord`, `RootSyncOutcome`, `RootSyncReport`, `SyncReport`, `SyncProgress`, `ProgressCallback`, `Error`, `ErrorCode`, `Result` |
+| `mount_points.hpp` | `list_mount_points()`, `MountPointLister` |
+
+**Internal (`src/file/`):**
+- `text.*`: UTF-8 conversion that never throws, ASCII case-folding, extension normalization.
+- `file_time.hpp`: exact mtime ↔ Unix nanoseconds.
+- `root_marker.*`: `.hoardor-root` read and write, UUIDs.
+- `library_internal.hpp`: helpers shared by `library.cpp` and `library_sync.cpp`.
+
+**Platform backends (`src/file/platform/`, chosen by CMake):**
+- `file_info_posix.cpp` and `file_info_windows.cpp`
+- `mount_points_linux.cpp`, `mount_points_windows.cpp`, and `mount_points_other.cpp` (empty for now)
+
+**Tables** (migration 1 of component `file`): `file_settings`, `file_categories` (seeded with Music, Movies, Shows, Books), `file_roots`, `file_entries`, and `file_scan_errors`. The full schema is in `features/file_sync.md` §4.3.
+
+**Settings** (`file::Settings`, persisted one row per field in `file_settings`):
+
+| Field | Default |
+|---|---|
+| `extension_kinds` | see `features/file_sync.md` §3.4 |
+| `ignored_names` | Windows, macOS, Linux, and NAS litter, plus `.hoardor-root` |
+| `ignored_prefixes` | `._`, `.Trash-` |
+| `sync_on_startup` | `false` |
+| `settle_window_seconds` | `10` |
+| `mass_removal_threshold_percent` | `25` |
+| `batch_max_rows` / `batch_max_milliseconds` | `2000` / `50` |
+| `progress_interval_files` | `500` |
+| `relocation_sample_size` / `relocation_min_match_percent` | `20` / `80` |
 
 ## 4. Roadmap
 

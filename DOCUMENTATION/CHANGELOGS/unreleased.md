@@ -2,6 +2,136 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### File Sync v1, phase 2: SQLite, library roots, background Sync (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:** Implemented phase 2 of File Sync (`features/file_sync.md` §4), completing **file scanner v1**:
+- **Storage:** SQLite arrives (`hoardor::db`), and the file engine gets its tables and settings persistence.
+- **Configuration:** the user configures categories and folders (roots).
+- **Sync:** pressing Sync reconciles the disk with the database under the offline-safety rules, in the background on a hoardor-owned thread (`master::SyncWorker`).
+
+The design was written into the docs first (commit `f0fac91`), then built in 7 commits. 109 tests pass, including as a non-root user, and the suite is clean under AddressSanitizer and ThreadSanitizer.
+
+**Added**
+- **`hoardor::db`** (`include/hoardor/db/database.hpp`, `src/db/database.cpp`):
+  - `Database`: WAL, `synchronous=NORMAL`, foreign keys, `busy_timeout`; file or in-memory
+  - `Statement` (RAII)
+  - `Transaction`: `BEGIN IMMEDIATE`, rolling back on destruction
+  - `migrate()`: versions per component, each migration in a transaction
+  - `sqlite3.h` is hidden from public headers
+- **SQLite 3.46.1 amalgamation** (`third_party/CMakeLists.txt`): fetched with `FetchContent`, SHA3-256 pinned, built as the static library `hoardor_sqlite3` with `SQLITE_DQS=0` and no extension loading.
+- **`file::Library`** (`include/hoardor/file/library.hpp`, `src/file/library.cpp`, `src/file/library_sync.cpp`):
+  - settings load and save
+  - categories CRUD
+  - roots: add, remove, change category, case sensitivity, manual relocation
+  - `sync(category | all)`, `sync_root`, `apply_held_removals`
+  - paged `entries` and `changed_entries`, `scan_errors`
+  - `resolve()` for playback
+- **Schema** (file migration 1): `file_settings`, `file_categories` (seeded with Music, Movies, Shows, Books), `file_roots`, `file_entries` (`path_key`, `seen_generation`, `changed_generation`, `unsettled`), and `file_scan_errors`.
+- **New `file::Settings` fields:** `sync_on_startup` (false), `settle_window_seconds` (10), `mass_removal_threshold_percent` (25), `batch_max_rows` / `batch_max_milliseconds` (2000 / 50), `progress_interval_files` (500), `relocation_sample_size` / `relocation_min_match_percent` (20 / 80).
+- **Root marker** `.hoardor-root` (`src/file/root_marker.*`): a text file holding a v4 UUID, read back after writing to verify it.
+- **Platform backends** (`src/file/platform/`, chosen by CMake):
+  - `list_mount_points()`: Linux `/proc/self/mountinfo`, Windows drive letters, other OSes empty for now
+  - `file_info()`: one POSIX `stat`, or the values Windows already cached
+- **`master::SyncWorker`** (`include/hoardor/master/sync_worker.hpp`, `src/master/sync_worker.cpp`):
+  - its own connection, one `std::jthread`, and a queue of scopes
+  - duplicate requests ignored
+  - `cancel()`, `idle()`, `wait_idle()`
+  - `sync_on_startup`
+  - a destructor that stops and joins promptly
+- **Benchmarks:** `benchmarks/file/sync_benchmark.cpp` (first sync and incremental sync of 50k files).
+- **Playground:** `hoardor_sync <db> <category> <folder>`, for real drives.
+- **Docs:** `engines/db.md` and `engines/master.md` (new), `features/file_sync.md` §4 (detailed design and as-built results), `engines/file.md` §3 (current state).
+
+**Changed**
+- **Scanner:** size and mtime now come from the one-call platform `file_info()` instead of libstdc++'s `file_size()` plus `last_write_time()`. The scan went from 427 to 317 ms.
+- **ARCHITECTURE §3:** one database connection per thread replaces "a single writer thread".
+- **ARCHITECTURE §7:** the measured results.
+- **`CLAUDE.md`:** the layout (`benchmarks/`, `third_party/`), the `BUILD_BENCHMARKS` option, and how to run the sanitizers and the non-root test pass.
+- **`.gitignore`:** `/build*/`.
+
+**Design decisions and trade-offs**
+- **One connection per thread, not a writer thread:** WAL plus `BEGIN IMMEDIATE` plus `busy_timeout` plus short batches gives the same behavior with no queue machinery in `db`. The worker's batches commit every 2000 rows or 50 ms, and always before a callback, so the UI's writes never wait long. A test checks that the UI connection can read and write mid-sync in under 1 s.
+- **Mark and sweep with generations:** every file a sync sees is stamped with the new generation, and only a *complete*, *verified* sync deletes rows with older stamps. This makes "offline is never deleted" mechanical: cancelled, lost, offline, identity-changed, and empty-root syncs simply never reach the sweep.
+- **Unreadable folders are protected** by stamping their known subtree as seen with a key range (`[dir/, dir0)`, since `'0'` follows `'/'` in byte order). That's one statement, with no list of errors held in memory.
+- **No lists in reports:** `RootSyncReport` holds counts and a generation, and consumers page through `changed_entries`. Other engines will reference `file_entries(id)` with `ON DELETE CASCADE`, so removals propagate without a removed-id list.
+- **`path_key`** (ASCII-lowercased on case-insensitive roots) keeps ids across case-only renames on NTFS and exFAT. Making a root case-insensitive is refused if its names would collide.
+- **Unsettled uses a symmetric window** (`|mtime − now| < window`), so files with future timestamps aren't unsettled forever. A file that settles counts as *modified*, so metadata engines pick it up.
+- **Config changes during a sync:** `master` doesn't intercept them. Integrity comes from transactions and foreign keys, and the app can call `SyncWorker::cancel()` first. This simplifies the earlier "master cancels automatically" (documented in `features/file_sync.md` §4.10, row 10).
+- **Performance work driven by measurement** (`perf`):
+  - 70% of the time was kernel path walks, which led to the one-`stat` backend.
+  - An unchanged file now costs one conditional `UPDATE` instead of a `SELECT` plus an `UPDATE`.
+  - A larger SQLite cache was measured, made no difference, and was rejected.
+- **Benchmark settle window = 0:** the generated tree is seconds old, so with the default window its files would count as still being copied.
+
+**Files**
+- New: `include/hoardor/db/database.hpp`, `src/db/database.cpp`, `third_party/CMakeLists.txt`, `include/hoardor/file/library.hpp`, `include/hoardor/file/mount_points.hpp`, `src/file/library.cpp`, `src/file/library_sync.cpp`, `src/file/library_internal.hpp`, `src/file/root_marker.hpp`, `src/file/root_marker.cpp`, `src/file/platform/file_info.hpp`, `src/file/platform/file_info_posix.cpp`, `src/file/platform/file_info_windows.cpp`, `src/file/platform/mount_points_linux.cpp`, `src/file/platform/mount_points_windows.cpp`, `src/file/platform/mount_points_other.cpp`, `include/hoardor/master/sync_worker.hpp`, `src/master/sync_worker.cpp`, `tests/db/database_test.cpp`, `tests/file/library_test.cpp`, `tests/file/sync_test.cpp`, `tests/master/sync_worker_test.cpp`, `tests/support/library_fixture.hpp`, `benchmarks/file/sync_benchmark.cpp`, `playground/file/sync_playground.cpp`, `DOCUMENTATION/application/engines/db.md`, `DOCUMENTATION/application/engines/master.md`.
+- Changed: `CMakeLists.txt`, `tests/CMakeLists.txt`, `benchmarks/CMakeLists.txt`, `playground/CMakeLists.txt`, `include/hoardor/file/settings.hpp`, `src/file/text.hpp`, `src/file/text.cpp`, `src/file/scanner.cpp`, `.gitignore`, `CLAUDE.md`, `DOCUMENTATION/application/ARCHITECTURE.md`, `DOCUMENTATION/application/features/file_sync.md`, `DOCUMENTATION/application/engines/file.md`, `DOCUMENTATION/CHANGELOGS/README.md`.
+
+**Tests:** 109 in total, 58 new in phase 2: `db` 12, `LibraryTest` 20, `RootMarker` 1, `SyncTest` 29, `SyncWorkerTest` 8. Plus one phase 1 test fixed.
+- **`db`:** foreign keys on, WAL on files, an uncreatable path, SQL errors, every column type (including UTF-8 and an embedded NUL), reuse, bind errors, commit, rollback by destructor, migrations (once, per component, a failure rolled back), and a WAL reader during a write.
+- **Library:**
+  - seeded categories, reopening
+  - settings: defaults, a round trip of every field, corrupt or out-of-range values, unknown keys, an empty list
+  - categories: CRUD, unique ignoring case, blank names, `InUse`
+  - roots:
+    - add: normalized path, marker, name, `path_in_volume`, a whole volume
+    - bad input
+    - independent roots on different drives and categories
+    - overlap: same, nested, parent, and a common-prefix sibling allowed
+    - `AlreadyExists` through a copied marker, marker adoption, `use_marker = false`, read-only fallback
+    - category change, removal keeping the marker
+  - malformed markers
+- **Sync:**
+  - kind filter by category, unchanged, modified (keeps the id), removed
+  - mass removal held and applied, the threshold as a setting
+  - missing root offline then back
+  - a different drive at the old path
+  - relocation through mount points (ids kept)
+  - an emptied marker-less root, an empty mount point
+  - the drive lost mid-sync (root error recorded, generation not advanced)
+  - cancel mid-sync, stop before start
+  - unsettled then settled, future mtime
+  - category change applying kinds
+  - case-only rename keeping the id, case-insensitive refused on collisions
+  - a root removed with its entries
+  - section vs global sync with progress positions
+  - one offline root not stopping others
+  - batch size 1
+  - paging
+  - `resolve` (OK, `FileMissing`, `RootOffline`, `NotFound`)
+  - manual relocation: with a marker, another root's marker refused, sample check pass and fail
+  - an unreadable subfolder keeping its entries
+- **SyncWorker:** a background run visible on another connection, duplicates ignored, cancel, startup sync on and off, reads and writes mid-sync, prompt shutdown, a bad database path.
+- **Quality runs:**
+  - all 109 pass as root, and as user `nobody` (so the 3 permission tests run)
+  - the worker tests pass 50 repeated runs
+  - AddressSanitizer is clean; it found a bug in a test's string-literal length, now fixed
+  - ThreadSanitizer is clean (run with ASLR disabled through `setarch -R`)
+
+**Performance** (Release build, this Linux VM, warm cache; target: incremental sync of 50k under 1 s)
+
+| Measurement | Result |
+|---|---|
+| Scan, 50k files | 317 ms |
+| First sync, 50k files | ≈900 ms |
+| Incremental sync, 50k files | 727 ms |
+| Peak memory, sync of 5k files | 6.4 MB |
+| Peak memory, sync of 50k files | 7.7 MB (flat; the growth is SQLite's fixed 2 MB cache filling up) |
+
+**Known limitations / follow-ups**
+- **Windows is untested** (CI deferred). Check by hand on Windows:
+  - `mount_points_windows.cpp` and `file_info_windows.cpp`
+  - junctions
+  - long paths
+  - UTF-16 conversion
+  - case detection on NTFS
+- **macOS:** no mount-point listing yet (phase 4), so automatic relocation is unavailable there.
+- **Cold-HDD numbers:** not measured yet. Run `hoardor_scan` / `hoardor_sync` on the external drive after a power cycle.
+- **OI-1 (playback stutter during a sync) is still open.** I/O priority and yielding to playback aren't implemented.
+- **Case folding is ASCII-only:** `path_key` and overlap checks don't fold non-ASCII letters (e.g. `Ä` vs `ä`).
+- **Empty-root guard:** a root the user really emptied stays Offline (its entries are kept) until it's removed or gets files again.
+- **Relocation without a marker** uses a random sample, so very small libraries are checked against fewer files.
+
 ### File Sync v1, phase 1: streaming scanner and settings (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** Implemented phase 1 of File Sync (`features/file_sync.md` §3). A streaming, flat-memory `Scanner` walks one root and yields media files or errors one at a time. Every tunable lives in `file::Settings`. Phase 1 also brings the build and test wiring (GoogleTest, an optional Google Benchmark target, tests running after each build) and a playground tool for real drives. The naive `discover()` skeleton is gone. The user approved the design on 2026-10-01.

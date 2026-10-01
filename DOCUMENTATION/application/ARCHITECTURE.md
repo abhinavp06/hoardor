@@ -99,10 +99,17 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
 ## 7. Testing and performance (Decided)
 
 - Tests use GoogleTest, fetched with CMake `FetchContent` and discovered by `gtest_discover_tests`, so they run through `ctest` and Visual Studio's Test Explorer.
-- Google Benchmark will be added for hot paths.
+- Google Benchmark (`BUILD_BENCHMARKS=ON`, Release build) covers the hot paths: the scan, and first and incremental syncs.
 - Proposed targets, to be validated by benchmarks. The current library has thousands of files: about 1 TB of music and about 5 TB of other media.
   - Incremental reconciliation of about 50k files: under 1 s with a warm OS cache, a few seconds on a cold HDD.
   - Memory stays flat regardless of library size.
+- **Measured (2026-10-01, File Sync v1, this Linux VM, warm cache, Release):**
+  - a scan of 50k files in 317 ms
+  - an incremental sync of 50k files in 727 ms
+  - a first sync of 50k files in ≈900 ms
+  - sync peak memory of 6.4 MB at 5k files and 7.7 MB at 50k
+  - not measured yet: a cold HDD, which needs the user's drive and `hoardor_sync`
+- **Sanitizers:** the suite also runs clean under AddressSanitizer and ThreadSanitizer. The steps are in `CLAUDE.md` ("Build and test").
 
 ## Decision log
 
@@ -127,6 +134,7 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
 | 2026-10-01 | Docs split into `engines/<engine>.md` (long-lived engine reference) and `features/<feature>.md` (per-feature plan, may span engines). `engines/file_engine.md` became `engines/file.md` plus `features/file_sync.md`. |
 | 2026-10-01 | Branching: one feature branch is one shippable feature and one PR, built in phases that are each designed first. File scanner v1 = file engine phases 1 and 2 (SQLite, DB design, roots, background Sync) on `abhinavp06/FILE_SCANNER_INIT`. |
 | 2026-10-01 | File Sync phase 2 design: `db` uses one connection per thread (no writer thread) with WAL, `BEGIN IMMEDIATE`, and `busy_timeout`. The SQLite 3.46.1 amalgamation is fetched with FetchContent. `master::SyncWorker` owns the background sync thread. See `engines/db.md`, `engines/master.md`, `features/file_sync.md` §4. |
+| 2026-10-01 | A hot-path query (size + mtime) gets a platform backend (`file_info`: one POSIX `stat`, cached values on Windows) after `perf` showed 70% of sync time in kernel path walks from libstdc++'s two `stat` calls per file. |
 | 2026-10-01 | Keep it simple: plain structs and free functions first. A class only when something holds state or invariants. An abstraction only when a second implementation exists. |
 | 2026-10-01 | *Proposed, pending the user's review, and replacing the caller-owns-the-thread proposal above:* hoardor owns background execution. Engine functions like `file::sync()` stay blocking and thread-agnostic. The `master` engine runs them on a hoardor-owned worker and enforces one sync per root, cancellation, I/O priority, and yielding to playback. Callbacks arrive on hoardor's thread. |
 | 2026-10-01 | The file engine starts with scanning only (phase 1: streaming scanner and configurable extension-to-kind map). Roots and persistence, move detection, and platform volume support follow in later phases. See `engines/file_engine.md`. |

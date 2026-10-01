@@ -12,7 +12,7 @@ This folder is the detailed history of hoardor. Each version has its own file, s
 
 | Version | Date | Highlights |
 |---|---|---|
-| [Unreleased](unreleased.md) | — | Project docs and Claude context. File engine design: on-demand Sync by category, storage model for external HDDs, RAID, and NAS. The `core` engine decision |
+| [Unreleased](unreleased.md) | — | **File Sync v1** (becomes `v0.1.0`): streaming scanner, `hoardor::db` on SQLite, library categories and roots (`.hoardor-root` markers, relocation), Sync with offline-safety rules, background `master::SyncWorker`. Also: project docs, the doc structure (engines/features), per-version changelogs, and the `core` on-demand rule |
 | [Baseline](baseline.md) | before 2026-10-01 | CMake skeleton and a naive `discover()` |
 
 Newest version first. Add a row whenever a version is cut.

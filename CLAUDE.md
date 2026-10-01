@@ -40,7 +40,9 @@ CMakeLists.txt                # root build. Defines the `hoardor` library and th
 include/hoardor/<engine>/     # public headers (.hpp)
 src/<engine>/                 # implementations (.cpp). Platform backends live in src/<engine>/platform/
 tests/<engine>/               # GoogleTest suite. Thorough and edge-case driven
-playground/<engine>/          # throwaway manual experiments. Anything goes here
+playground/<engine>/          # throwaway manual experiments. Anything goes here (hoardor_scan, hoardor_sync)
+benchmarks/<engine>/          # Google Benchmark targets (BUILD_BENCHMARKS=ON, Release build)
+third_party/                  # third-party code fetched by CMake (SQLite amalgamation)
 DOCUMENTATION/
   CHANGELOGS/                 # detailed changelog, one file per version. See "Living documentation" below
     README.md                 # index of versions, versioning rules, how to cut a version, entry template
@@ -62,7 +64,19 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-Build options in the root `CMakeLists.txt`: `BUILD_PLAYGROUND`, `BUILD_TESTS`, `RUN_TESTS_AFTER_BUILD`. Build output goes to `build/` (git-ignored).
+Build options in the root `CMakeLists.txt`: `BUILD_PLAYGROUND`, `BUILD_TESTS`, `RUN_TESTS_AFTER_BUILD`, `BUILD_BENCHMARKS` (default OFF). Build output goes to `build*/` (git-ignored).
+
+```bash
+# Benchmarks (always Release)
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON -DBUILD_TESTS=OFF
+cmake --build build-release -j && ./build-release/benchmarks/hoardor_benchmarks
+
+# Sanitizers (san = address or thread). On recent kernels ThreadSanitizer needs ASLR off: prefix with `setarch $(uname -m) -R`.
+cmake -S . -B build-$san -DCMAKE_BUILD_TYPE=Debug -DRUN_TESTS_AFTER_BUILD=OFF \
+      -DCMAKE_CXX_FLAGS=-fsanitize=$san -DCMAKE_C_FLAGS=-fsanitize=$san -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=$san
+```
+
+Permission tests (unreadable or read-only folders) skip themselves when run as root. On this VM, run the test binary once as an unprivileged user (e.g. copy it somewhere world-readable and use `runuser -u nobody -- ./hoardor_tests`) so they run too.
 
 ## Code conventions
 

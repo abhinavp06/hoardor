@@ -1,6 +1,6 @@
 # Master engine (`hoardor::master`)
 
-Status: **Decided** (2026-10-01). The first slice is built as part of File Sync v1, phase 2.
+Status: **Built** (2026-10-01): the first slice, as part of File Sync v1, phase 2. 8 tests in `tests/master/sync_worker_test.cpp`. They pass 50 repeated runs, and ThreadSanitizer reports no races.
 
 `master` coordinates the other engines (ARCHITECTURE §2). It's also where hoardor owns background execution (`features/file_sync.md` §4.10): engines expose blocking, thread-agnostic functions, and `master` runs them on hoardor's threads.
 

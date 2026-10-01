@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **In progress**: approved by the user on 2026-10-01. Phase 1 is built. Phase 2 is designed in §4 and being built |
+| Status | **Built, awaiting the user's code review**: approved on 2026-10-01, phases 1 and 2 implemented on 2026-10-01. Becomes **Shipped (`v0.1.0`)** when the PR merges |
 | Branch | `abhinavp06/FILE_SCANNER_INIT` (one PR) |
 | Ships in | `v0.1.0` |
 | Engines involved | `file` (scanner, roots, reconciliation), `db` (SQLite mechanics, phase 2), `master` (background sync worker, phase 2) |
@@ -146,8 +146,10 @@ while (auto result = scanner->next()) {
   - **Why not `recursive_directory_iterator`:** in libstdc++, the first error on any subdirectory (permission denied, an I/O error) ends the *whole* walk. Error handling has to stay local to each directory, so the scanner manages the stack itself.
 - **Stat-only:** the scanner never opens files.
   - **Type checks** (symlink, directory, regular file) use the type the directory listing already returned (`d_type` on Linux), so they cost no system call.
-  - **On Linux** each *media* file costs two `stat` calls, because libstdc++'s `file_size()` and `last_write_time()` each stat. The second is served from the inode cache, so it never adds disk I/O. A single platform `stat` could replace them if a benchmark ever needs it.
-  - **On Windows**, the directory listing already carries size and mtime.
+  - **Size and mtime** come from one platform call, `detail::file_info()` in `src/file/platform/`:
+    - **POSIX:** a single `stat()`.
+    - **Windows:** the values the directory listing already cached, so no system call.
+  - *History:* libstdc++'s `file_size()` plus `last_write_time()` walked the full path twice, and `perf` showed 70% of sync time in kernel path lookups.
 - **Root loss:** on any read error, the scanner checks whether the root itself is still reachable, by opening it. Opening forces a real read, whereas a cached `stat` of a dead mount can still succeed. If the root is unreachable, the scanner emits a single root `ScanError` and ends, instead of thousands of per-directory errors from an unplugged drive. An error while listing the root itself is always a root error.
 - **Deleted mid-scan:** a file *or folder* that disappears between the listing and its `stat` or open is skipped silently, as long as the root is still reachable. It's really gone, so a later sync may remove it.
 - **Paths** are converted by hoardor's own non-throwing converter (`src/file/text.cpp`): UTF-16 on Windows, bytes on POSIX, producing UTF-8 with `/` separators on every OS.
@@ -242,8 +244,9 @@ GoogleTest. Each test builds its own tree in a unique temporary directory and re
 
 - **Target:** a full scan of a 50k-file tree in under 1 s with a warm OS cache (ARCHITECTURE §7).
 - **Benchmark:** Google Benchmark scans a generated tree of 50k empty files, spread across nested directories. Empty files cost the same as real ones here, because the scanner only calls `stat`.
-- **Result (Release build, this Linux VM, warm cache): 427 ms for 50k files (≈117k files/s)**, within the target.
-  - The first version took 709 ms. It used `symlink_status()`, which does an uncached `lstat` per entry in libstdc++.
+- **Result (Release build, this Linux VM, warm cache): 317 ms for 50k files (≈158k files/s)**, within the target.
+  - The first version took 709 ms. It used `symlink_status()`, an uncached `lstat` per entry in libstdc++.
+  - The second took 427 ms, with two path-walking `stat` calls per media file. One `stat` gives 317 ms.
   - Syscall profile for a real tree: one `openat` and `getdents64` per directory, and `newfstatat` only for media files.
 - **Cold external HDD:** measured by hand with the playground against the user's real drive, after a reboot or a drive power cycle so the cache is cold. Recorded in the changelog. This is the number that matters most for how long a Sync takes.
 - **Memory:** peak RSS stays flat between a 5k-file tree and a 50k-file tree. Checked by hand with the playground and `/usr/bin/time -v`. **Result: 4,224 KB for both** (the whole process).
@@ -507,6 +510,26 @@ CREATE TABLE file_scan_errors (
   - `resolve()`, paging, `changed_entries`, `scan_errors`
 - **`master::SyncWorker`:** see `engines/master.md`.
 - **Benchmark:** a first sync of 50k files (all inserts), and an incremental sync of 50k unchanged files. **Target:** incremental under 1 s warm (ARCHITECTURE §7).
+
+**Results as built** (Release build, this Linux VM, warm cache, database file in WAL mode):
+
+| Benchmark | Result | Notes |
+|---|---|---|
+| Scan 50k files | **317 ms** | Phase 1 scanner with one `stat` per media file |
+| First sync, 50k files (all inserts) | **≈ 900 ms** | |
+| Incremental sync, 50k unchanged | **727 ms** | Target < 1 s. Was 888 ms before the single-statement fast path and the one-`stat` change |
+| Peak memory, sync of 5k vs 50k files (`hoardor_sync`, Debug build) | **6.4 MB vs 7.7 MB** | The difference is SQLite's page cache filling up to its fixed 2 MB limit. Flat |
+
+- **Profile** (`perf`, incremental sync): about 70% of the time is in the kernel (`stat` path walks), about 16% in hoardor, and SQLite's VM about 3%.
+- **Cache size:** a larger SQLite page cache (8 or 16 MB) made no measurable difference, so the default is kept.
+
+**As-built notes** (where the implementation refined the design above):
+- **Fast path for unchanged files:** one conditional `UPDATE ... WHERE path_key = ? AND size = ? AND mtime_ns = ? AND kind = ? AND relative_path = ? AND unsettled = ?`. If it changes no row, the file takes the full `SELECT` plus `INSERT`/`UPDATE` path.
+- **Case-insensitive collisions:** an `INSERT` hitting the `(root_id, path_key)` unique key is recorded as a scan error ("another file has the same name ignoring case"), and the sync continues.
+- **Progress** is reported at the start of each root, every `progress_interval_files` files (always right after a commit), and at the end of the scan.
+- **Default categories** are seeded by migration 1. Like any category, they can be renamed, edited, or deleted.
+- **Settings** gained the sync fields in the same struct (`file::Settings`).
+- **Tests run as `nobody`:** the permission-dependent tests (unreadable folder, read-only folder) are skipped as root, so they were also run as user `nobody` (copying the test binary), where they pass.
 
 ### 4.10 Background sync
 
