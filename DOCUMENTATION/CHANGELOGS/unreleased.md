@@ -2,6 +2,32 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Workspace with TYLI (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:** hoardor moved from `/root/hoardor` into a workspace next to the TYLI app: `/root/tyli-workspace/{hoardor, tyli}`. Nothing inside the repository depended on the old location. Only the build folders, Claude's memory, and which `CLAUDE.md` loads at session start were affected.
+
+**Changed**
+- `CLAUDE.md`: a new "Workspace" section. Paths stay relative to the repo root, the workspace has its own `CLAUDE.md` with the cross-repo rules, and hoardor never depends on TYLI.
+
+**Outside the repository** (recorded here so the history is complete)
+- **Moved:** `/root/hoardor` to `/root/tyli-workspace/hoardor`.
+- **Cloned:** TYLI (`git@github.com:abhinavp06/tyli.git`, `master`) into `/root/tyli-workspace/tyli`. Its `master` was reset by the user and holds only a `.gitignore`. New TYLI branches are based on `master`.
+- **Workspace `CLAUDE.md`** (`/root/tyli-workspace/CLAUDE.md`, not version-controlled):
+  - describes both repos and the one-way dependency
+  - imports `hoardor/CLAUDE.md`, so starting Claude at the workspace root still loads hoardor's rules and ARCHITECTURE
+  - sets the per-repo git and changelog rules for changes that span both
+  - lists TYLI's open setup decisions: its own docs, the Qt version and where Qt runs, and how it consumes hoardor
+- **Claude memory:** copied from the `-root-hoardor` project key to `-root-tyli-workspace` and `-root-tyli-workspace-hoardor`, so it loads whichever folder a session starts in.
+- **Build folders:** recreated. `build/` was reconfigured from the new path (its cache pointed at `/root/hoardor`), and all 109 tests pass there. `build-release/` was removed; recreate it with the benchmark command in `CLAUDE.md` when needed.
+
+**Design decisions and trade-offs**
+- **The workspace root isn't a git repo:** its `CLAUDE.md` is only a pointer to the two versioned `CLAUDE.md` files plus the cross-repo rules, so losing it costs little.
+- **Rejected:** a third "workspace" repo or git submodules. That's more machinery than two side-by-side clones need.
+
+**Known limitations / follow-ups**
+- TYLI needs its own `CLAUDE.md`, architecture doc, and changelog folder before its first feature.
+- hoardor needs the `PROJECT_IS_TOP_LEVEL` change before TYLI builds it.
+
 ### Code tree as an offline HTML page (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** At the user's request, the code tree is also saved as `DOCUMENTATION/application/CODE_TREE.html`, a self-contained offline page. It's generated from `CODE_TREE.md` by `tools/code_tree_html.py`, and keeping both current whenever we work on a feature is now a workflow rule.

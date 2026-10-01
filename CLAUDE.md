@@ -6,6 +6,10 @@ The architecture, the decisions behind it, and their rationale are in the file b
 
 @DOCUMENTATION/application/ARCHITECTURE.md
 
+## Workspace
+
+hoardor usually lives in a workspace next to the TYLI app: `/root/tyli-workspace/{hoardor, tyli}`. The workspace root has its own `CLAUDE.md` (not version-controlled), which imports this file and holds the cross-repo rules. Every path in this file is relative to the hoardor repository root, wherever the session started. hoardor never depends on TYLI.
+
 ## Common goal
 
 Build a single, snappy, low-memory, fully offline home for the user's whole media and writing library, with hoardor as the engine room. Every change should move toward that goal without costing performance, memory, or portability.
