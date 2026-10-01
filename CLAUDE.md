@@ -44,6 +44,7 @@ tests/<engine>/               # GoogleTest suite. Thorough and edge-case driven
 playground/<engine>/          # throwaway manual experiments. Anything goes here (hoardor_scan, hoardor_sync)
 benchmarks/<engine>/          # Google Benchmark targets (BUILD_BENCHMARKS=ON, Release build)
 third_party/                  # third-party code fetched by CMake (SQLite amalgamation)
+tools/                        # developer scripts (code_tree_html.py)
 DOCUMENTATION/
   CHANGELOGS/                 # detailed changelog, one file per version. See "Living documentation" below
     README.md                 # index of versions, versioning rules, how to cut a version, entry template
@@ -53,7 +54,8 @@ DOCUMENTATION/
   notes/                      # the user's PERSONAL notes. Read only when asked. Never edit
   application/
     ARCHITECTURE.md           # system-wide architecture and decision log
-    CODE_TREE.md              # one tree of the whole repo: files, types, functions, tests, targets
+    CODE_TREE.md              # one tree of the whole repo: files, types, functions, tests, targets (the source)
+    CODE_TREE.html            # the same tree as an offline page with search; GENERATED, never edit by hand
     engines/<engine>.md       # long-lived reference per engine: responsibilities, principles, current API/tables, roadmap
     features/<feature>.md     # plan per feature (PRD): phases, API detail, edge cases, tests, decisions, open items, status
 ```
@@ -107,7 +109,7 @@ Permission tests (unreadable or read-only folders) skip themselves when run as r
 - [ ] `DOCUMENTATION/application/features/<feature>.md` matches what was actually built, and its status is updated (e.g. Shipped in `v0.1.0`).
 - [ ] `DOCUMENTATION/application/engines/<engine>.md` "Current state" lists the real public API, tables, and settings.
 - [ ] `DOCUMENTATION/application/ARCHITECTURE.md` reflects any system-wide decision, including a new decision-log row.
-- [ ] `DOCUMENTATION/application/CODE_TREE.md` lists every file, type, function, and test that was added, renamed, or removed.
+- [ ] `DOCUMENTATION/application/CODE_TREE.md` lists every file, type, function, and test that was added, renamed, or removed, and `CODE_TREE.html` was regenerated (`python3 tools/code_tree_html.py`).
 
 ## Living documentation
 
@@ -124,5 +126,5 @@ These files are the project's memory. The user relies on them for context later,
   Be thorough. A future reader with no other context should understand the change. New work goes in `unreleased.md` until a version is cut. Never rewrite or delete past entries, and never edit a version file once it's cut. If something was wrong, add a correcting entry.
 - **`DOCUMENTATION/application/ARCHITECTURE.md`**: update it whenever a system-wide decision is made or changed, and add a dated row to its decision log.
 - **`DOCUMENTATION/application/features/<feature>.md`**: update it whenever the feature's design, API, schema, edge cases, or phases change. Implementation often reveals changes, so record them as they happen, so the doc never drifts from the code.
-- **`DOCUMENTATION/application/CODE_TREE.md`**: update it in the same change whenever a file, type, function, test, or build target is added, renamed, or removed. It's a map, so a stale entry is worse than none.
+- **`DOCUMENTATION/application/CODE_TREE.md` + `CODE_TREE.html`**: the user asked for both to stay current whenever we work on a feature. Update the Markdown in the same change whenever a file, type, function, test, or build target is added, renamed, or removed, then run `python3 tools/code_tree_html.py` to regenerate the HTML. Never edit the HTML by hand. It's a map, so a stale entry is worse than none.
 - **`DOCUMENTATION/application/engines/<engine>.md`**: update it when an engine's responsibilities, principles, or roadmap change, and refresh its "Current state" whenever a feature ships.

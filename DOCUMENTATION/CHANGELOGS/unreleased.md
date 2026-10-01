@@ -2,6 +2,43 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Code tree as an offline HTML page (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:** At the user's request, the code tree is also saved as `DOCUMENTATION/application/CODE_TREE.html`, a self-contained offline page. It's generated from `CODE_TREE.md` by `tools/code_tree_html.py`, and keeping both current whenever we work on a feature is now a workflow rule.
+
+**Added**
+- `tools/code_tree_html.py`:
+  - parses the box-drawing tree and the call-flow block in `CODE_TREE.md`
+  - classifies each entry (folder, file, namespace, class, struct, enum, type alias, function, member, static, tests, target) and tags `(private)` and `(internal)`
+  - writes one HTML file with no network dependencies: collapsible folders (native `<details>`), a search that keeps matches in context and highlights them, expand and collapse all, `/` to focus search, `Esc` to clear, stats (55 files, 35 types, 70 functions, 109 tests), a legend, the call flow, and light and dark themes
+- `DOCUMENTATION/application/CODE_TREE.html` (generated).
+
+**Changed**
+- `CODE_TREE.md`: lists `tools/` and `CODE_TREE.html`, and says to regenerate after every edit.
+- `CLAUDE.md`: the layout (`tools/`, `CODE_TREE.html`), the Definition of done (regenerate the HTML), and the living-documentation rule (both files stay current with every feature).
+
+**Design decisions and trade-offs**
+- **Generated from the Markdown, never hand-written:**
+  - Two hand-maintained copies would drift.
+  - The Markdown stays the source because it diffs well and is read at session start.
+  - The HTML is for browsing.
+- **Self-contained and offline:** no CDN or fonts, to match the project's offline ethos. It opens straight from disk.
+- **Python for a docs tool:** it's a developer script, not part of the C++ library, so it adds no dependency to hoardor.
+
+**Fixed**
+- The first generator version cut the tree short, because a description contained a literal code fence. Fences now only count at the start of a line.
+
+**Tests**
+- I verified the page in jsdom:
+  - no script errors
+  - all 231 entries rendered
+  - search for `sync_root` (14 visible, highlighted), `OI-1`, `mount`, and a non-matching term (shows "Nothing matches")
+  - expand all (57 of 57) and collapse all
+- `node --check` on the embedded script.
+
+**Known limitations / follow-ups**
+- The generator relies on the tree's formatting: 4-character indent groups, and two or more spaces between a label and its description.
+
 ### 500k-file benchmark, code tree, and untracked build output (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:**
