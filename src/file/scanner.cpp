@@ -91,14 +91,22 @@ std::optional<ScanResult> Scanner::next() {
         const detail::Utf8 utf8_name = detail::to_utf8(name);
         if (is_ignored(detail::ascii_lower(utf8_name.text))) continue;
 
-        // symlink_status: a symlink is reported as a symlink, never as its target.
-        const fs::file_type type = entry.symlink_status(ec).type();
+        // These checks use the type the directory listing already returned (d_type on
+        // Linux, attributes on Windows), so they cost no extra system call.
+        // Symlinks are checked first so is_directory() never follows one.
+        const bool is_symlink = entry.is_symlink(ec);
+        if (ec) {
+            if (auto result = on_error(relative, ec, false)) return result;
+            continue;
+        }
+        if (is_symlink) continue;
+        const bool is_directory = entry.is_directory(ec);
         if (ec) {
             if (auto result = on_error(relative, ec, false)) return result;
             continue;
         }
 
-        if (type == fs::file_type::directory) {
+        if (is_directory) {
             if (!utf8_name.valid) {
                 if (auto result = on_error(relative, std::make_error_code(std::errc::illegal_byte_sequence), true)) return result;
                 continue;
@@ -113,8 +121,13 @@ std::optional<ScanResult> Scanner::next() {
             stack_.push_back(Level{std::move(child), std::move(relative)});
             continue;
         }
-        // Symlinks, Windows junctions, FIFOs, sockets, and devices are never media.
-        if (type != fs::file_type::regular) continue;
+        // FIFOs, sockets, and devices are never media.
+        const bool is_regular = entry.is_regular_file(ec);
+        if (ec) {
+            if (auto result = on_error(relative, ec, false)) return result;
+            continue;
+        }
+        if (!is_regular) continue;
 
         const auto kind = kinds_.find(detail::normalize_extension(detail::to_utf8(name.extension()).text));
         if (kind == kinds_.end()) continue;
