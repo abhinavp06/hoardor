@@ -41,7 +41,18 @@ add_library(hoardor
     src/file/settings.cpp
     src/file/text.cpp
     src/file/scanner.cpp
+    src/file/library.cpp
+    src/file/root_marker.cpp
 )
+
+# One mount-point backend per OS (the only platform-specific file so far).
+if(WIN32)
+    target_sources(hoardor PRIVATE src/file/platform/mount_points_windows.cpp)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_sources(hoardor PRIVATE src/file/platform/mount_points_linux.cpp)
+else()
+    target_sources(hoardor PRIVATE src/file/platform/mount_points_other.cpp)
+endif()
 
 target_include_directories(hoardor
     PUBLIC

@@ -38,6 +38,27 @@ struct Settings {
     // Name prefixes to skip, matched ignoring (ASCII) case.
     std::vector<std::string> ignored_prefixes;
 
+    // ---- Sync ----
+
+    // master queues a global sync in the background when it starts.
+    bool sync_on_startup = false;
+    // A file whose mtime is within this many seconds of the sync (either direction)
+    // is probably still being copied: it's stored as unsettled until a later sync.
+    std::int64_t settle_window_seconds = 10;
+    // A sync that would remove more than this share of a root's entries holds the
+    // removals for confirmation (Library::apply_held_removals) instead of applying them.
+    int mass_removal_threshold_percent = 25;
+    // A write transaction commits after this many rows or milliseconds, whichever
+    // comes first, so other writers (play counts, ratings) never wait long.
+    int batch_max_rows = 2000;
+    int batch_max_milliseconds = 50;
+    // Progress is reported every this many files.
+    int progress_interval_files = 500;
+    // Manually relocating a root without a marker checks this many known entries,
+    // and needs this share of them to exist with the same size.
+    int relocation_sample_size = 20;
+    int relocation_min_match_percent = 80;
+
     static Settings defaults();
 };
 

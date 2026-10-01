@@ -25,6 +25,9 @@ struct Utf8 {
 // On Linux and macOS it is bytes (any non-UTF-8 sequence is invalid).
 Utf8 to_utf8(const std::filesystem::path& path);
 
+// A path from UTF-8 text, on every OS (path(std::string) uses the ANSI code page on Windows).
+std::filesystem::path from_utf8(std::string_view utf8);
+
 // The building blocks of to_utf8, exposed so both code paths can be tested on any OS.
 Utf8 utf8_from_utf16(std::u16string_view utf16);
 Utf8 utf8_from_bytes(std::string_view bytes);
