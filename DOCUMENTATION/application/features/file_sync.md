@@ -258,49 +258,267 @@ GoogleTest. Each test builds its own tree in a unique temporary directory and re
 - **Windows junctions: to verify by hand.** The cached type check relies on the standard library reporting a junction as a symlink (or at least not as a plain directory). If MSVC reports junctions as directories, the scanner would descend into them, which risks a cycle on a junction loop. Media drives rarely contain junctions.
 
 
-## 4. Phase 2: Roots, persistence, reconciliation (outline)
+## 4. Phase 2: Roots, persistence, reconciliation
 
-Part of file scanner v1. To be detailed here before implementation, after phase 1 is built. That covers the full DB design: `hoardor::db` mechanics, the `file_*` schema, settings persistence, and migrations. It also covers the first slice of `master` (background sync worker), in its own `engines/master_engine.md`.
+Part of File Sync v1. Detailed on 2026-10-01 after phase 1 was built. The DB mechanics are in `engines/db.md`, and the background worker in `engines/master.md`.
 
-- **Categories:** configured by the user, each with a name and the file kinds it accepts. The defaults are Music: audio and image (cover art); Movies and Shows: video, subtitle, and image; Books: text and image. Sync passes each root a `Settings` copy whose `extension_kinds` is filtered to its category's kinds, so a stray `.txt` in the Music folder is ignored. Phase 1's `Scanner` doesn't change.
-- **Library roots:** UUID, display name, category, last-known path, path within its volume, marker on/off, case-sensitive yes/no (detected read-only by looking up an existing name with its case flipped), status (online/offline), and last scan's file count (the progress estimate).
-- **Root resolution and relocation** as in `engines/file.md` §2.3. Needs a small platform interface, `list_mount_points()`: `/proc/self/mountinfo` on Linux, `GetLogicalDriveStringsW` on Windows (Windows verified by hand).
-- **Tables:** `file_roots` and `file_entries` (root, relative path, size, mtime, kind, unsettled flag, the generation of the last scan that saw it). Unique on (root, relative path), with case folding for case-insensitive roots.
-- **Sync API.** This is the call behind the UI's Sync button:
+### 4.1 Overview
 
-  ```cpp
-  SyncReport sync();                    // every root (a global Sync)
-  SyncReport sync(CategoryId category); // every root of one category (a section's Sync)
-  ```
+| Piece | Where | What it does |
+|---|---|---|
+| `db::Database`, `db::Statement`, `db::Transaction`, `db::migrate` | `hoardor::db` | One SQLite connection, prepared statements, RAII transactions, versioned migrations per engine |
+| `file::Library` | `hoardor::file` | The file engine's repository and logic: settings, categories, roots, sync, queries, `resolve()` |
+| `master::SyncWorker` | `hoardor::master` | Runs `file::Library::sync()` on a hoardor-owned background thread |
+| `list_mount_points()` | `src/file/platform/` | The OS's mounted volumes, for finding a relocated root |
 
-  How the layers fit together:
-  - **The category** decides only *which roots* take part.
-  - **Each root** then goes through the same steps: resolve it (`engines/file.md` §2.3), scan it with phase 1's `Scanner`, and reconcile the result.
-  - **Switching the UI** from per-section Sync to a global Sync is just a matter of which overload TYLI calls.
-  - **Speed:** a whole-category sync is the only granularity. It's fast enough that adding one album doesn't need anything finer: a stat-only pass over about 50k files takes under 1 s warm, and seconds on a cold HDD.
-- **For each root, Sync:**
-  - streams the scanner and upserts rows in batched transactions
-  - removes unseen rows only under the safety rules in `engines/file.md` §2.4
-  - returns a report to the caller: per root, added, modified, removed, unsettled, and errors, plus which roots were skipped as offline. There is no event bus.
-  - reports progress (root N of M, plus the scanner's counters) and can be cancelled between roots and between batches
-  - if a sync is requested while one is already running, it doesn't start a second one for the same roots
-- **Unsettled files:** a file whose mtime is within a configurable settle window (default 10 s) of the scan is probably still being copied. It is stored with `unsettled = true`, and metadata engines skip it until a later scan clears the flag. The caller (`master`) may run a follow-up sync after the window.
-- **Player lookup:** `resolve(file_id)` returns the absolute path, or "offline".
-- **Database location:** the machine's internal app-data folder, never a media drive (ARCHITECTURE §3).
-- **Settings persistence:** `file::Settings` is saved in SQLite (the table design is part of phase 2's DB design), and it gains the sync settings: `sync_on_startup` (default off), the settle window, and the mass-removal guard threshold (default 25%).
-- **Dependencies:** this phase brings in SQLite and the minimal `hoardor::db` the file engine needs.
+Following the "keep it simple" rule, that's four classes (`Database`, `Statement`, `Transaction`, `Library`) plus the worker. Everything else is a plain struct or a free function.
 
-### 4.1 Background sync
+**Connections and threads:**
+- Each thread uses its **own** `db::Database` connection: the UI or caller has one, and the sync worker has one.
+- SQLite's WAL mode lets readers run while the worker writes.
+- The worker's write transactions are short (§4.6), and `busy_timeout` makes another writer wait briefly instead of failing.
+- This replaces the earlier "single writer thread" idea in ARCHITECTURE §3: it gives the same behavior with no queue or thread inside `db`.
+
+### 4.2 Public API (`include/hoardor/file/library.hpp`)
+
+```cpp
+namespace hoardor::file {
+
+using CategoryId = std::int64_t;
+using RootId = std::int64_t;
+using EntryId = std::int64_t;
+
+enum class ErrorCode { NotFound, InvalidArgument, AlreadyExists, Overlap, InUse, RootOffline, FileMissing, Io, Database };
+struct Error { ErrorCode code; std::string message; };
+template <class T> using Result = std::expected<T, Error>;
+
+struct Category { CategoryId id; std::string name; std::vector<FileKind> kinds; };
+
+enum class RootStatus : std::uint8_t { Unknown = 0, Online = 1, Offline = 2 };
+struct Root {
+    RootId id; std::string uuid; CategoryId category_id; std::string name;
+    std::string path;            // last-known absolute path (UTF-8)
+    std::string path_in_volume;  // the same folder relative to its mount point; "" = the whole volume
+    bool use_marker; bool case_sensitive; RootStatus status;
+    std::int64_t generation;     // the last completed sync
+    std::int64_t last_sync_ns; std::uint64_t file_count; std::uint64_t held_removals;
+};
+struct Entry {
+    EntryId id; RootId root_id; std::string relative_path; std::uint64_t size; std::int64_t mtime_ns;
+    FileKind kind; bool unsettled; std::int64_t changed_generation;
+};
+struct ScanErrorRecord { RootId root_id; std::string relative_path; bool is_directory; std::string message; std::int64_t generation; };
+
+enum class RootSyncOutcome { Synced, Offline, Cancelled, Failed };
+struct RootSyncReport {
+    RootId root_id; RootSyncOutcome outcome; std::int64_t generation;
+    std::uint64_t added, modified, removed, unchanged, unsettled, errors;
+    bool relocated; bool removals_held; std::uint64_t held_removals;
+    std::string message;  // why it's offline or failed, in plain words
+};
+struct SyncReport { std::vector<RootSyncReport> roots; bool cancelled; };
+struct SyncProgress { std::size_t root_index; std::size_t root_count; RootId root_id; ScanProgress scan; };
+using ProgressCallback = std::function<void(const SyncProgress&)>;
+using MountPointLister = std::function<std::vector<std::filesystem::path>()>;
+
+class Library {
+public:
+    // Runs the file engine's migrations. The Database must outlive the Library.
+    static Result<Library> open(db::Database& database, MountPointLister mounts = list_mount_points);
+
+    Result<Settings> load_settings();                 // the defaults overlaid with the stored values
+    Result<void> save_settings(const Settings& settings);
+
+    Result<std::vector<Category>> categories();
+    Result<CategoryId> add_category(std::string_view name, std::vector<FileKind> kinds);
+    Result<void> update_category(const Category& category);
+    Result<void> remove_category(CategoryId id);      // InUse while roots belong to it
+
+    Result<std::vector<Root>> roots(std::optional<CategoryId> category = {});
+    Result<Root> root(RootId id);
+    Result<Root> add_root(CategoryId category, const std::filesystem::path& path, std::string_view name = {}, bool use_marker = true);
+    Result<void> remove_root(RootId id);              // deletes its entries; the marker file stays
+    Result<void> set_root_category(RootId id, CategoryId category);
+    Result<void> set_root_case_sensitive(RootId id, bool case_sensitive);
+    Result<Root> relocate_root(RootId id, const std::filesystem::path& new_path);
+
+    SyncReport sync(std::optional<CategoryId> category = {}, std::stop_token stop = {}, const ProgressCallback& progress = {});
+    RootSyncReport sync_root(RootId id, std::stop_token stop = {}, const ProgressCallback& progress = {});
+    Result<std::uint64_t> apply_held_removals(RootId id);
+
+    // Paged reads (by id, ascending), for consumers that never load everything.
+    Result<std::vector<Entry>> entries(RootId root, EntryId after = 0, std::size_t limit = 500);
+    Result<std::vector<Entry>> changed_entries(RootId root, std::int64_t generation, EntryId after = 0, std::size_t limit = 500);
+    Result<std::vector<ScanErrorRecord>> scan_errors(RootId root);
+    Result<std::filesystem::path> resolve(EntryId entry);  // for playback: RootOffline / FileMissing
+};
+
+}
+```
+
+- **Callers react to the report, not to lists.** A sync never returns lists of changed files, which would grow with the library. It returns counts and a `generation`. Consumers page through `changed_entries(root, generation)`.
+- **Removed files clean up after themselves.** Other engines' tables reference `file_entries(id)` with `ON DELETE CASCADE`, so their data goes away with the file.
+
+### 4.3 Schema (file engine migration 1)
+
+```sql
+CREATE TABLE file_settings   (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE file_categories (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                              kinds TEXT NOT NULL);                           -- "audio,image"
+CREATE TABLE file_roots (
+    id INTEGER PRIMARY KEY, uuid TEXT NOT NULL UNIQUE,
+    category_id INTEGER NOT NULL REFERENCES file_categories(id),
+    name TEXT NOT NULL, path TEXT NOT NULL, path_in_volume TEXT NOT NULL,
+    use_marker INTEGER NOT NULL, case_sensitive INTEGER NOT NULL,
+    status INTEGER NOT NULL DEFAULT 0, generation INTEGER NOT NULL DEFAULT 0,
+    last_sync_ns INTEGER NOT NULL DEFAULT 0, file_count INTEGER NOT NULL DEFAULT 0,
+    held_removals INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE file_entries (
+    id INTEGER PRIMARY KEY,
+    root_id INTEGER NOT NULL REFERENCES file_roots(id) ON DELETE CASCADE,
+    relative_path TEXT NOT NULL,            -- exact bytes from disk, for opening the file
+    path_key TEXT NOT NULL,                 -- relative_path, ASCII-lowercased on case-insensitive roots
+    size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, kind INTEGER NOT NULL,
+    unsettled INTEGER NOT NULL DEFAULT 0,
+    seen_generation INTEGER NOT NULL,       -- the last sync that saw it
+    changed_generation INTEGER NOT NULL,    -- the last sync that added or changed it
+    UNIQUE (root_id, path_key));
+CREATE INDEX file_entries_changed ON file_entries (root_id, changed_generation, id);
+CREATE TABLE file_scan_errors (
+    root_id INTEGER NOT NULL REFERENCES file_roots(id) ON DELETE CASCADE,
+    relative_path TEXT NOT NULL, is_directory INTEGER NOT NULL, message TEXT NOT NULL,
+    generation INTEGER NOT NULL);
+-- Seeded default categories: Music (audio,image), Movies (video,subtitle,image),
+-- Shows (video,subtitle,image), Books (text,image). The user can edit or delete them.
+```
+
+- **`path_key`** makes a case-only rename on a case-insensitive drive (`song.mp3` → `Song.mp3` on NTFS or exFAT) update the same row, so the file keeps its id. Only ASCII letters are folded (a known limitation).
+- **Sweeping by generation (mark and sweep):** each sync stamps every file it sees with the new generation. After a complete scan, rows with an older `seen_generation` are the removed files.
+
+### 4.4 Settings persistence
+
+- **Table:** `file_settings` holds one row per field.
+- **Format:** integers are written in decimal, booleans as `true` or `false`, lists as newline-separated lines, and `extension_kinds` as `ext=kind` lines.
+- **Loading:** start from `Settings::defaults()` and overlay every stored value that parses. A missing key, or a value that fails to parse, keeps the default. Unknown keys are ignored, so a newer database still opens in an older build.
+- **New fields in `file::Settings`:**
+
+| Field | Default | Meaning |
+|---|---|---|
+| `sync_on_startup` | `false` | `master` queues a global sync when it starts |
+| `settle_window_seconds` | `10` | A file modified within this window of the sync (in either direction) is unsettled |
+| `mass_removal_threshold_percent` | `25` | Above this share of a root's entries, removals are held for confirmation |
+| `batch_max_rows` / `batch_max_milliseconds` | `2000` / `50` | Commit the write transaction after this many rows or this much time |
+| `progress_interval_files` | `500` | Report progress every this many files |
+| `relocation_sample_size` / `relocation_min_match_percent` | `20` / `80` | Manually relocating a root without a marker checks this many known entries and needs this share to match |
+
+### 4.5 Roots
+
+**Adding a root** (`add_root`):
+1. **Check the path:** it must exist and be a directory. It's stored as an absolute, normalized UTF-8 path.
+2. **Check the category:** it must exist.
+3. **Check for overlap:** a root inside another root, or containing one, is rejected (`Overlap`). The comparison is component-wise and ignores ASCII case, so `E:\Music` and `e:\music\Rock` count as overlapping.
+4. **Marker:**
+   - If a `.hoardor-root` is already there with a UUID that another root uses, the folder is already a root (reached through another path), so it's rejected (`AlreadyExists`).
+   - If the UUID isn't in use, it's **adopted**, so re-adding a folder after a lost database keeps its identity.
+   - Otherwise a new UUID is written.
+   - If writing fails (read-only storage), the root falls back to `use_marker = false`, which isn't an error.
+5. **Path within its volume:** computed from the longest mount point that contains the path.
+6. **Case sensitivity:** detected without writing anything. The marker or another name is looked up with its ASCII case flipped: if the flipped name is the same file, the root is case-insensitive. If nothing can be probed, the root defaults to case-sensitive. The user can override it (`set_root_case_sensitive`).
+
+**Resolving a root** (at the start and end of a sync, in `resolve()`, and in `relocate_root()`). It follows `engines/file.md` §2.3:
+- **With a marker:**
+  1. If the last-known path holds our UUID, the root is online.
+  2. Otherwise (no marker, an unreadable one, or **another root's UUID**), each mount point `M` is checked for our marker at `M/path_in_volume`.
+  3. If found, the root has been relocated: its path is updated and it's online.
+  4. If not, it's offline.
+- **Without a marker:** the root is online if its path is an existing directory. The safety rules in §4.6 still protect it.
+
+**Manual relocation** (`relocate_root`): the new path must be a directory, must not overlap other roots, and must hold our marker. If it holds no marker at all, a **sample check** is used instead: `relocation_sample_size` known entries must exist with the same size, at least `relocation_min_match_percent` of them. For a marker root, the marker is then written. If the folder holds a *different* root's marker, relocation is rejected.
+
+### 4.6 Sync (per root)
+
+1. **Load settings**, filtered to the root's category kinds.
+2. **Resolve the root.** If it's offline, mark it Offline and report the reason. Nothing is scanned or removed.
+3. `generation = root.generation + 1`. Count the root's existing entries.
+4. **Stream the scanner** inside batched write transactions. A batch commits after `batch_max_rows` rows or `batch_max_milliseconds`, whichever comes first, and always before calling a callback, so no callback ever runs while holding the write lock. For each item:
+   - **A file** is looked up by `(root_id, path_key)`:
+     - *Not found:* insert it → **added**.
+     - *Size, mtime, kind, or exact path changed:* update it → **modified**. A file whose unsettled flag clears also counts as modified, so metadata engines pick it up.
+     - *Otherwise:* only `seen_generation` is updated → **unchanged**.
+     - In every case, `changed_generation` is set for added and modified files, and `unsettled` is recomputed: `|mtime − now| < settle_window`. A file dated far in the future (a wrong camera clock) is therefore *not* unsettled forever.
+   - **A directory error:** every known entry under that folder is stamped as seen, so it can't be removed, and the error is recorded in `file_scan_errors`.
+   - **A file error:** that entry is stamped as seen, and the error is recorded.
+   - **A root error (drive lost):** stop. The root is marked Offline, and nothing is removed.
+   - **A stop request:** stop. The outcome is Cancelled, and nothing is removed.
+5. **Resolve the root again.** If its identity changed during the scan, mark it Offline and remove nothing.
+6. **Empty-root guard:** the scan found 0 files but the root had entries, so the drive is probably unmounted. Mark it Offline and remove nothing.
+7. **Removals:** `to_remove` = entries whose `seen_generation` is older than this sync.
+   - Above the mass-removal threshold (and the root had entries): **hold** the removals. The report sets `removals_held`, and the root stores `held_removals`.
+   - Otherwise, delete them → **removed**.
+   - `apply_held_removals(root)` deletes held removals later, once the user confirms.
+8. **Finish:** delete older `file_scan_errors`, and update the root's `generation`, status (Online), `last_sync_ns`, and `file_count`. The outcome is Synced.
+
+`sync(category)` runs step 1–8 for each root of the category (or all roots), in order of id, one at a time. It checks the stop token between roots, and reports `root_index` and `root_count` in its progress.
+
+### 4.7 Mount points (`src/file/platform/`)
+
+- `std::vector<std::filesystem::path> list_mount_points()`, one file per OS, chosen by CMake:
+  - **Linux** (`mount_points_linux.cpp`): reads `/proc/self/mountinfo` and decodes its octal escapes (`\040` is a space).
+  - **Windows** (`mount_points_windows.cpp`): uses `GetLogicalDriveStringsW` (`C:\`, `E:\`, …). Verified by hand.
+  - **Other systems** (`mount_points_other.cpp`): returns nothing. Automatic relocation is then unavailable, while manual relocation and everything else still work. macOS gets a real implementation in phase 4.
+- Tests inject their own lister (`MountPointLister`), so relocation is tested with plain folders.
+
+### 4.8 Edge cases (phase 2)
+
+| Case | Expected behavior |
+|---|---|
+| Root folder missing (drive unplugged) | Offline, entries kept, nothing removed |
+| A different drive at the old path (marker UUID differs) | Mount points searched. Offline unless our marker is found elsewhere |
+| Drive letter changed (our marker found at `M/path_in_volume`) | Relocated: path updated, all entries keep their ids |
+| Empty mount-point folder left by an unmounted drive (no marker) | Offline, nothing removed |
+| Marker-less root becomes empty | Empty-root guard: Offline, nothing removed |
+| Drive unplugged mid-sync | Root error: what was seen is kept, nothing removed, Offline |
+| Unreadable subfolder | Its known entries are kept. The error is recorded and visible in `scan_errors()` |
+| More than 25% of entries gone | Removals held, reported, and applied only by `apply_held_removals` |
+| A file still being copied | Stored unsettled. Cleared, and counted as modified, on a later sync |
+| A file with a future mtime | Not unsettled once it's beyond the settle window |
+| Case-only rename on a case-insensitive root | Same row (same id), with `relative_path` updated |
+| A stray `.txt` in Music | Not added: the category's kinds filter it |
+| Category changed on a root | The next sync applies the new kinds: files of kinds no longer accepted are removed (subject to the guard) |
+| Sync cancelled | Cancelled: committed batches stay, nothing removed, generation not advanced |
+| Root removed during a sync on another connection | The worker's inserts fail on the foreign key, and that root reports Failed. Data stays consistent |
+| Adding a root inside another root, or around one | `Overlap` |
+| Adding a folder that's already a root under another path | `AlreadyExists` (same marker UUID) |
+| Re-adding a folder after a lost database | Its marker UUID is adopted |
+| Read-only root (e.g. NTFS on macOS) | Added with `use_marker = false` |
+| Settings value corrupted in the database | The default is used for that field |
+| Database from a newer build (unknown setting keys) | Ignored |
+| `resolve()` of a file on an unplugged drive / a deleted file | `RootOffline` / `FileMissing` |
+
+### 4.9 Tests and performance
+
+- **`db`:** open in memory and on disk (WAL), exec and prepare errors, binding and reading every type, transaction commit and rollback (RAII), migrations (applied once, versioned per component, a failed migration rolls back), and a WAL reader seeing committed data while another connection writes.
+- **`file::Library`:**
+  - settings round trip (defaults, overrides, corrupt values, unknown keys)
+  - categories CRUD, `InUse`
+  - roots: add, the marker written or adopted, `AlreadyExists`, `Overlap`, read-only fallback, case detection
+  - sync: added, modified, unchanged, removed; unsettled and future mtimes; the category kind filter
+  - every row in §4.8 that can be produced with plain folders, including relocation through an injected mount lister
+  - `resolve()`, paging, `changed_entries`, `scan_errors`
+- **`master::SyncWorker`:** see `engines/master.md`.
+- **Benchmark:** a first sync of 50k files (all inserts), and an incremental sync of 50k unchanged files. **Target:** incremental under 1 s warm (ARCHITECTURE §7).
+
+### 4.10 Background sync
 
 Every sync, whether at startup or from the Sync button, runs off the UI thread. The app opens instantly on the last known library state, and a sync updates it while the user browses and plays.
 
-**Threading model (Proposed): hoardor owns the sync thread, through `master`.** There are two layers:
+**Threading model (Decided, 2026-10-01): hoardor owns the sync thread, through `master`.** There are two layers:
 
 1. **`file::sync()` is a plain blocking function.** It runs on whichever thread calls it and starts no threads itself. It takes a `std::stop_token` and a progress callback. `std::stop_token` is the C++20 standard "please stop" signal: the thread's owner requests a stop, and Sync checks it between roots and batches. This layer is what the file engine's tests exercise: deterministic and single-threaded.
-2. **The `master` engine runs syncs in the background on a thread hoardor owns.** TYLI (or a future daemon or CLI) calls something like `master.request_sync(category)` and returns immediately. `master` owns:
+2. **The `master` engine runs syncs in the background on a thread hoardor owns.** TYLI (or a future daemon or CLI) calls `master::SyncWorker::request_sync(category)`, which returns immediately. `master` owns:
    - the sync worker thread and its lifetime (start, stop, join on shutdown)
    - one sync at a time per root, and ignoring duplicate requests
-   - cancelling a running sync when the configuration changes
+   - `cancel()` for a running sync, which the app calls before a configuration change. Data integrity doesn't depend on it (row 10)
    - the sync thread's I/O priority and throttling while playback uses the same drive (§6, OI-1)
    - in phase 4, one worker per volume
 
@@ -314,7 +532,7 @@ Why hoardor and not the caller owns the thread (this reverses the earlier propos
 - **What's kept from the earlier proposal:** the engine function stays blocking and thread-agnostic, so it remains easy to test. Threading lives in one layer (`master`), not spread across engines.
 
 What it costs:
-- `master` needs a first slice in phase 2: a worker thread, a small queue of pending sync requests, and shutdown handling. It gets its own design doc (`engines/master_engine.md`) when phase 2 is detailed.
+- `master` needs a first slice in phase 2: a worker thread, a small queue of pending sync requests, and shutdown handling. Its design is in `engines/master.md`.
 - If that worker and queue turn out to be generic, they become the first `core` component. Under the on-demand rule (ARCHITECTURE §2), background sync is the concrete feature that justifies it.
 - **Callback contract:** callbacks run on hoardor's worker thread. They must return quickly and must not call blocking hoardor operations, because that could deadlock. TYLI's bridge passes them to the UI thread.
 
@@ -331,7 +549,7 @@ What it costs:
 | 7 | **Disk contention.** A sync and playback on the same HDD compete for the disk head. This includes pressing Sync while watching a movie | **Important open item (§6, OI-1).** To be measured during benchmarking and testing |
 | 8 | **Drives still spin up at startup.** Background doesn't mean silent: every attached HDD in a synced category wakes, which takes 5–10 s and makes noise | This is why `sync_on_startup` defaults to off |
 | 9 | **Closing the app mid-sync** | `master` requests a stop on its worker and joins it. The stop token cancels between batches. Already committed batches are correct, and no removals happen, because `engines/file.md` §2.4 requires a complete scan. The next sync finishes the job. Exit can still be delayed by a single `stat` stuck on a drive that's spinning up |
-| 10 | **The user acts during a sync:** presses Sync again, or edits the configuration (removes a root, changes its category) | A duplicate Sync is ignored (§4). A configuration change cancels the running sync for affected roots before applying. `master` enforces both |
+| 10 | **The user acts during a sync:** presses Sync again, or edits the configuration (removes a root, changes its category) | A duplicate Sync (same scope already queued or running) is ignored by `SyncWorker::request_sync`. For configuration changes, the app may call `SyncWorker::cancel()` first. Even without that, data stays consistent: every write is in a transaction, and removing a root cascades its entries and makes the worker's next insert for it fail on the foreign key, so that root reports Failed. *(Simplified on 2026-10-01 from "master cancels automatically", which would require routing every config change through `master`.)* |
 | 11 | **More background work later.** New files from a sync will feed tag reading (metadata engines), which opens files and is far heavier than `stat` | This is out of scope here. It is likely the first real need for a background job queue in `core`, and it's decided when the metadata engines are designed |
 | 12 | **Memory and CPU** | Unchanged. Memory stays flat, and a stat-only sync is I/O-bound, not CPU-bound |
 
@@ -340,7 +558,7 @@ What it costs:
 
 1. **Root marker file:** yes. hoardor writes `.hoardor-root` into each root (opt-out per root, skipped on read-only storage).
 2. **Marker name:** `.hoardor-root`. TYLI is the product, but hoardor must not know TYLI exists (ARCHITECTURE §1). The dependency points one way: TYLI knows it uses hoardor, never the other way round.
-3. **Sync at startup:** a setting (`sync_on_startup`, default off). When on, it runs **in the background**, so startup never waits for it. Consequences are in §4.1.
+3. **Sync at startup:** a setting (`sync_on_startup`, default off). When on, it runs **in the background**, so startup never waits for it. Consequences are in §4.10.
 4. **Mass-removal guard:** 25% of a root's entries by default, configurable.
 
 
