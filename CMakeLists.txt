@@ -31,7 +31,12 @@ option(BUILD_BENCHMARKS "Build Google Benchmark targets (use a Release build)" O
 # Library
 # -----------------------------------------------------------------------------
 
+add_subdirectory(third_party)
+
 add_library(hoardor
+    # DB ENGINE
+    src/db/database.cpp
+
     # FILE ENGINE
     src/file/settings.cpp
     src/file/text.cpp
@@ -44,6 +49,8 @@ target_include_directories(hoardor
     PRIVATE
         src
 )
+
+target_link_libraries(hoardor PRIVATE hoardor_sqlite3)
 
 if(MSVC)
     target_compile_options(hoardor PRIVATE /W4 /permissive- /utf-8)
