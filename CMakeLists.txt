@@ -35,6 +35,7 @@ add_library(hoardor
     # FILE ENGINE
     src/file/settings.cpp
     src/file/text.cpp
+    src/file/scanner.cpp
 )
 
 target_include_directories(hoardor

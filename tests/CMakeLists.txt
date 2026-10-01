@@ -11,6 +11,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(hoardor_tests
     file/settings_test.cpp
     file/text_test.cpp
+    file/scanner_test.cpp
 )
 
 target_link_libraries(hoardor_tests PRIVATE hoardor GTest::gtest_main)
