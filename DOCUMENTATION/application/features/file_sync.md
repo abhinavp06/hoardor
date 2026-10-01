@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Proposed**: a draft awaiting the user's approval |
+| Status | **In progress**: approved by the user on 2026-10-01. Phase 1 is built. Phase 2 is designed in §4 and being built |
 | Branch | `abhinavp06/FILE_SCANNER_INIT` (one PR) |
 | Ships in | `v0.1.0` |
 | Engines involved | `file` (scanner, roots, reconciliation), `db` (SQLite mechanics, phase 2), `master` (background sync worker, phase 2) |
@@ -142,12 +142,20 @@ while (auto result = scanner->next()) {
 - **Emitted:** regular files with a mapped extension only. Directories, symlinks, FIFOs, sockets, and devices are never emitted.
 - **Symlinks are not followed.** This avoids cycles and double-counting. A user who wants linked content adds its target as a separate root.
 - **Ordering** is file-system order, with no sorting. Sorting would need the whole listing in memory.
-- **Memory:** the scanner holds one open directory handle per level of depth (`std::filesystem::recursive_directory_iterator`), so memory is proportional to tree depth, not file count.
-- **Stat-only:** the scanner never opens files. On Windows, and over SMB, the directory listing already carries size and mtime. On Linux each emitted file costs one `stat`.
-- **Root loss:** when reading a directory fails, the scanner checks once whether the root itself is still reachable. If it isn't, it emits a single root `ScanError` and ends, instead of thousands of per-directory errors from an unplugged drive.
-- **Paths** are produced with `path::generic_u8string()`, so they are UTF-8 with `/` separators on every OS. `path::string()` is not used: on Windows it converts to the ANSI code page and mangles non-Latin names.
+- **Memory:** the scanner keeps its own stack of `std::filesystem::directory_iterator`s, one open directory handle per level of depth, so memory is proportional to tree depth, not file count.
+  - **Why not `recursive_directory_iterator`:** in libstdc++, the first error on any subdirectory (permission denied, an I/O error) ends the *whole* walk. Error handling has to stay local to each directory, so the scanner manages the stack itself.
+- **Stat-only:** the scanner never opens files.
+  - **Type checks** (symlink, directory, regular file) use the type the directory listing already returned (`d_type` on Linux), so they cost no system call.
+  - **On Linux** each *media* file costs two `stat` calls, because libstdc++'s `file_size()` and `last_write_time()` each stat. The second is served from the inode cache, so it never adds disk I/O. A single platform `stat` could replace them if a benchmark ever needs it.
+  - **On Windows**, the directory listing already carries size and mtime.
+- **Root loss:** on any read error, the scanner checks whether the root itself is still reachable, by opening it. Opening forces a real read, whereas a cached `stat` of a dead mount can still succeed. If the root is unreachable, the scanner emits a single root `ScanError` and ends, instead of thousands of per-directory errors from an unplugged drive. An error while listing the root itself is always a root error.
+- **Deleted mid-scan:** a file *or folder* that disappears between the listing and its `stat` or open is skipped silently, as long as the root is still reachable. It's really gone, so a later sync may remove it.
+- **Paths** are converted by hoardor's own non-throwing converter (`src/file/text.cpp`): UTF-16 on Windows, bytes on POSIX, producing UTF-8 with `/` separators on every OS.
+  - `path::string()` isn't used: on Windows it converts to the ANSI code page and mangles non-Latin names.
+  - `path::u8string()` isn't used either: MSVC throws on an unpaired surrogate, and libstdc++ passes invalid bytes through unchecked.
   - A name that can't be represented as valid UTF-8 (an unpaired UTF-16 surrogate on Windows, or invalid bytes on Linux) is reported as a `ScanError` with `std::errc::illegal_byte_sequence`. It is not emitted, so the "paths are UTF-8" rule holds everywhere.
-- **mtime:** `std::filesystem::file_time_type` has a platform-specific epoch, so it is converted once, in one helper, to `int64` nanoseconds since the Unix epoch.
+- **mtime:** `std::filesystem::file_time_type` has a platform-specific epoch, so it is converted once, in one helper (`src/file/file_time.hpp`), to `int64` nanoseconds since the Unix epoch, with `std::chrono::clock_cast`. The conversion is exact, so the same file always yields the same value.
+- **Ignored names** match case-insensitively for ASCII letters only (`@EADIR` matches `@eaDir`). Non-ASCII letters must match exactly.
 - **Single-threaded.** Scanning several roots in parallel is the caller's decision. Phase 2 scans one root at a time, which is safe for HDDs.
 
 ### 3.4 Defaults (configuration, not constants)
@@ -234,8 +242,12 @@ GoogleTest. Each test builds its own tree in a unique temporary directory and re
 
 - **Target:** a full scan of a 50k-file tree in under 1 s with a warm OS cache (ARCHITECTURE §7).
 - **Benchmark:** Google Benchmark scans a generated tree of 50k empty files, spread across nested directories. Empty files cost the same as real ones here, because the scanner only calls `stat`.
+- **Result (Release build, this Linux VM, warm cache): 427 ms for 50k files (≈117k files/s)**, within the target.
+  - The first version took 709 ms. It used `symlink_status()`, which does an uncached `lstat` per entry in libstdc++.
+  - Syscall profile for a real tree: one `openat` and `getdents64` per directory, and `newfstatat` only for media files.
 - **Cold external HDD:** measured by hand with the playground against the user's real drive, after a reboot or a drive power cycle so the cache is cold. Recorded in the changelog. This is the number that matters most for how long a Sync takes.
-- **Memory:** peak RSS stays flat between a 5k-file tree and a 50k-file tree. Checked by hand with the playground and `/usr/bin/time -v`.
+- **Memory:** peak RSS stays flat between a 5k-file tree and a 50k-file tree. Checked by hand with the playground and `/usr/bin/time -v`. **Result: 4,224 KB for both** (the whole process).
+- **Running as non-root:** the permission test (unreadable folder) is skipped as root. It was run and passes as user `nobody`.
 
 ### 3.9 Known limitations
 
@@ -243,6 +255,7 @@ GoogleTest. Each test builds its own tree in a unique temporary directory and re
 - The ignore list matches exact names and prefixes only, with no glob patterns.
 - Cancellation happens between items. A single `stat` blocked on a slow or hung drive (a spinning-up HDD, a hung NFS mount) can't be interrupted. Scans therefore always run off the UI thread.
 - CI is deferred. Windows behavior (UTF-8 conversion, mtime epoch, long paths) is verified by hand on Windows.
+- **Windows junctions: to verify by hand.** The cached type check relies on the standard library reporting a junction as a symlink (or at least not as a plain directory). If MSVC reports junctions as directories, the scanner would descend into them, which risks a cycle on a junction loop. Media drives rarely contain junctions.
 
 
 ## 4. Phase 2: Roots, persistence, reconciliation (outline)

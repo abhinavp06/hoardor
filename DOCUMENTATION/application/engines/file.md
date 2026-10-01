@@ -116,8 +116,16 @@ Detecting the storage type automatically is possible on each OS, but USB enclosu
 
 ## 3. Current state
 
-Nothing has shipped yet. File Sync v1 (`features/file_sync.md`) defines the first API, tables, and settings. When it ships, this section lists:
-- **Public headers:** `include/hoardor/file/settings.hpp` (`FileKind`, `Settings`, `kind_of`), `include/hoardor/file/scanner.hpp` (`Scanner`, `ScannedFile`, `ScanError`, `ScanProgress`), plus whatever phase 2 adds.
+File Sync v1 (`features/file_sync.md`) is in progress. Built so far (phase 1):
+- **`include/hoardor/file/settings.hpp`:**
+  - `FileKind`: Audio=1, Video=2, Text=3, Image=4, Subtitle=5. The numbers are stored in the database, so they are never renumbered.
+  - `to_string` and `file_kind_from_string`
+  - `Settings`: `extension_kinds`, `ignored_names`, `ignored_prefixes`, and `defaults()`
+  - `kind_of()`
+- **`include/hoardor/file/scanner.hpp`:** `Scanner` (`open`, `next`, `progress`), `ScannedFile`, `ScanError`, `ScanResult`, `ScanProgress`.
+- **Internal (`src/file/`):** `text.hpp` (UTF-8 conversion that never throws, ASCII case-folding, extension normalization) and `file_time.hpp` (exact mtime ↔ Unix nanoseconds).
+
+Still to come with phase 2:
 - **Tables:** `file_*`, designed in File Sync phase 2.
 - **Settings:** every field of `file::Settings` and its default.
 

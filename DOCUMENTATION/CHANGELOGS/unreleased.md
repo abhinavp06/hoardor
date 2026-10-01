@@ -2,6 +2,89 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### File Sync v1, phase 1: streaming scanner and settings (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:** Implemented phase 1 of File Sync (`features/file_sync.md` §3). A streaming, flat-memory `Scanner` walks one root and yields media files or errors one at a time. Every tunable lives in `file::Settings`. Phase 1 also brings the build and test wiring (GoogleTest, an optional Google Benchmark target, tests running after each build) and a playground tool for real drives. The naive `discover()` skeleton is gone. The user approved the design on 2026-10-01.
+
+**Added**
+- `file::Settings` (a plain struct; defaults in code; persisted from phase 2) with `extension_kinds`, `ignored_names`, and `ignored_prefixes`. The defaults are the design doc's tables.
+- `file::FileKind` with stable numeric values (Audio=1…Subtitle=5) for the database, `to_string`, `file_kind_from_string`, and `kind_of()`.
+- `file::Scanner`: `open(root, settings)`, `next()` → `std::optional<std::expected<ScannedFile, ScanError>>`, `progress()`.
+- Internal helpers:
+  - `src/file/text.*`: UTF-16 and byte paths become valid UTF-8 with `/`, never throwing, flagging and repairing invalid input with U+FFFD. Also ASCII case-folding and extension normalization.
+  - `src/file/file_time.hpp`: an exact `file_time_type` ↔ Unix-nanosecond conversion via `clock_cast`.
+- Build:
+  - GoogleTest 1.15.2 via `FetchContent`, with `gtest_discover_tests`
+  - `RUN_TESTS_AFTER_BUILD` wired as a `run_tests` target in the default build
+  - a `BUILD_BENCHMARKS` option (default OFF) with Google Benchmark 1.9.0
+  - compiler warnings on (`-Wall -Wextra -Wpedantic`; `/W4 /utf-8` on MSVC)
+- `benchmarks/file/scanner_benchmark.cpp`, `playground/file/scan_playground.cpp` (`hoardor_scan <dir>`), `tests/support/temp_dir.hpp`.
+
+**Removed**
+- `include/hoardor/file/file_engine.hpp` and `src/file/file_engine.cpp` (`discover()`, `MediaType`, `FileType`, `File`, `FileEntry`).
+
+**Design decisions and trade-offs**
+- **A custom directory stack instead of `recursive_directory_iterator`:** in libstdc++, the first error on any subdirectory ends the entire recursive iteration. That would turn one unreadable folder into "the rest of the drive is unknown". With its own stack of `directory_iterator`s, the scanner keeps errors local and still uses memory proportional to depth.
+- **Cached entry types instead of `symlink_status()`:**
+  - The type checks are free (`d_type`), whereas `symlink_status()` costs an `lstat` per entry in libstdc++: benchmark 709 → 427 ms.
+  - *Trade-off:* Windows junction handling depends on how MSVC reports junctions, so it needs a manual check.
+- **A custom UTF-8 converter instead of `u8string()`:**
+  - MSVC throws on unpaired surrogates, and libstdc++ passes invalid bytes through.
+  - The converter never throws and lets the scanner report invalid names as errors, so every emitted path is valid UTF-8.
+  - The UTF-16 path is unit-tested on Linux through `utf8_from_utf16`.
+- **Root reachability is probed by opening the root, not with `stat`:** a cached `stat` of a dead mount can still succeed.
+- **Folders deleted mid-scan are skipped silently, not reported:** reporting them would protect their stale entries from removal, but they really are gone.
+- **The phase 2 sync settings aren't in `Settings` yet:** they arrive with the phase that uses them.
+
+**Files**
+- New: `include/hoardor/file/settings.hpp`, `include/hoardor/file/scanner.hpp`, `src/file/settings.cpp`, `src/file/scanner.cpp`, `src/file/text.hpp`, `src/file/text.cpp`, `src/file/file_time.hpp`, `tests/file/settings_test.cpp`, `tests/file/text_test.cpp`, `tests/file/scanner_test.cpp`, `tests/support/temp_dir.hpp`, `benchmarks/CMakeLists.txt`, `benchmarks/file/scanner_benchmark.cpp`.
+- Changed: `CMakeLists.txt`, `tests/CMakeLists.txt`, `playground/CMakeLists.txt`, `playground/file/scan_playground.cpp` (renamed from `file_engine_playground.cpp` and rewritten).
+- Removed: `include/hoardor/file/file_engine.hpp`, `src/file/file_engine.cpp`.
+- Docs: `features/file_sync.md` (status, §3.3 behavior as built, §3.8 results, §3.9 limitations), `engines/file.md` (current state).
+
+**Tests** (39, run with `ctest --test-dir build`; all pass as root, and also as user `nobody`, so the permission test runs)
+- **Settings and `kind_of`:**
+  - every default kind and the litter defaults
+  - extension case, user keys with a dot or uppercase letters
+  - an edited map (removed `ts`, remapped `txt`, added `nfo`)
+  - no extension, a dot-only name (`.mp3`), multiple dots, a trailing dot
+  - empty settings, kind-name round trip
+- **Text helpers:**
+  - extension normalization, ASCII-only lowercasing
+  - valid UTF-8 (CJK, emoji, NFD) kept byte for byte
+  - invalid bytes repaired: Latin-1, a lone continuation byte, an overlong sequence, an encoded surrogate, a truncated sequence
+  - UTF-16 surrogate pairs, lone high and low surrogates
+  - `/` separators
+- **Scanner:**
+  - a missing root, a root that's a file, an empty root (and staying finished)
+  - nested relative paths
+  - directories and non-media skipped, including a directory named `empty.mp3`
+  - every kind, exact size, exact mtime (ns), the same mtime across scans
+  - a root with a trailing separator
+  - non-ASCII names (CJK, emoji, NFC and NFD) round-trip to the same file
+  - 40-level nesting with a path over 260 characters
+  - every default ignored name as a directory (not descended), `._` and `.Trash-` prefixes, case-insensitive `@EADIR`, an ignored file name
+  - custom and empty settings
+  - symlinks to a file and a directory, and a symlink cycle
+  - an unreadable subdirectory (an error, then the scan continues)
+  - the root removed mid-scan (exactly one root error, last)
+  - files vanishing mid-scan (no errors)
+  - the scanner destroyed mid-scan
+  - progress counters
+  - case-only-different names (both emitted)
+  - a FIFO (POSIX)
+  - invalid UTF-8 file and directory names (POSIX)
+
+**Performance**
+- **Speed:** a 50k-file tree, Release build, warm cache, on this VM: **427 ms** (≈117k files/s). The target is < 1 s.
+- **Memory:** peak RSS of `hoardor_scan` is **4,224 KB for both 5k and 50k files**, so memory is flat.
+- **Cold external HDD:** not measured yet. It needs the user's drive and the playground.
+
+**Known limitations / follow-ups**
+- Verify on Windows: junctions, long paths, the UTF-16 conversion, and the mtime epoch.
+- Measure a cold-HDD scan with `hoardor_scan` on the real external drive.
+- On Linux, each media file takes two `stat` calls (`file_size` and `last_write_time`). The second is cache-served, so it's acceptable for now.
+
 ### Design docs split into engine references and feature plans (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** On the user's question of whether the doc should be `file_engine.md` or `file_sync.md`, the design docs were split in two. `engines/<engine>.md` holds the long-lived reference for each engine. `features/<feature>.md` holds the plan for each feature, which may span engines. Documentation only. No design content changed. Text was moved and cross-references were renumbered.
