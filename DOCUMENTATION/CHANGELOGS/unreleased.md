@@ -2,7 +2,104 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
-### Changelog split into per-version files (2026-10-01, branch `abhinavp06/file_engine_init`)
+### Design docs split into engine references and feature plans (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:** On the user's question of whether the doc should be `file_engine.md` or `file_sync.md`, the design docs were split in two. `engines/<engine>.md` holds the long-lived reference for each engine. `features/<feature>.md` holds the plan for each feature, which may span engines. Documentation only. No design content changed. Text was moved and cross-references were renumbered.
+
+**Added**
+- `DOCUMENTATION/application/features/`, with `file_sync.md` (moved with `git mv` from `engines/file_engine.md`):
+  - a header table: status, branch, version, engines involved
+  - 1 Overview (what the user gets, what's out of scope)
+  - 2 Phases (1 and 2)
+  - 3 Phase 1 (formerly §4)
+  - 4 Phase 2 and 4.1 Background sync (formerly §5)
+  - 5 Decisions (formerly §10)
+  - 6 Open items, including OI-1 (formerly §11)
+- `DOCUMENTATION/application/engines/file.md`:
+  - 1 Purpose, consumers, non-goals
+  - 2 Storage model (2.1–2.5, unchanged)
+  - 3 Current state (a placeholder until v1 ships)
+  - 4 Roadmap: the phase table, with phase 3, phase 4, and deferred realtime watching as 4.1–4.3
+  - 5 Relationship to `core`
+
+**Changed**
+- `CLAUDE.md`: session-start step 4, the repository layout, workflow rule 1 (design before code), the Definition of done, and Living documentation all cover both doc types.
+- `DOCUMENTATION/application/ARCHITECTURE.md`: the intro, the §6 heading, and a decision-log row. Older decision-log rows and changelog entries still name `engines/file_engine.md`. They were correct at the time and aren't rewritten.
+
+**Design decisions and trade-offs**
+- **Engine reference plus feature plans** (the user picked this out of three options):
+  - *Why:* features span engines (File Sync touches `file`, `db`, and `master`), and appending every feature to its engine's doc would grow giant files, which the user explicitly doesn't want.
+  - *Engine docs* stay small and current.
+  - *Feature docs* keep the full reasoning, and record which version they shipped in.
+- *Rejected:* one feature doc only. Engine facts would scatter across features.
+- *Rejected:* one engine doc only. It grows without bound.
+- **`engines/file.md`, not `file_engine.md`:** matches the existing `engines/<engine>.md` pattern. The suffix was redundant inside `engines/`.
+- **Phase numbers stay engine-wide** (1–4): File Sync v1 is phases 1–2, and phases 3–4 are future features on the engine roadmap. Existing references to "phase 3" and "phase 4" stay valid.
+
+**Files**
+- `DOCUMENTATION/application/features/file_sync.md` (moved from `engines/file_engine.md` and restructured), `DOCUMENTATION/application/engines/file.md` (new), `CLAUDE.md`, `DOCUMENTATION/application/ARCHITECTURE.md`, `DOCUMENTATION/CHANGELOGS/unreleased.md`.
+
+### Scope of file scanner v1: phases 1 and 2 on one branch (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:** The user decided that this branch ships the full scanning feature: phase 1 (the streaming scanner and settings) and phase 2 (SQLite, DB design, library roots, background Sync, and settings persistence). They go in one PR, released as `v0.1.0`. Documentation only.
+
+**Changed**
+- `CLAUDE.md` workflow rule 2: "one phase is one PR" becomes "one feature branch is one shippable feature and one PR, built in phases that are each designed first".
+- `DOCUMENTATION/application/engines/file_engine.md`:
+  - the status line defines file scanner v1
+  - the §3 phase plan reflects the branch policy
+  - the §5 phase 2 outline notes it's part of this branch, and what its detailed design must cover: `db` mechanics, the `file_*` schema, settings persistence, migrations, and `engines/master_engine.md` for the background worker
+- `DOCUMENTATION/application/ARCHITECTURE.md`: a decision-log row for the branching rule and the v1 scope.
+- `DOCUMENTATION/CHANGELOGS/README.md`: `v0.1.0` = documentation plus file scanner v1 (phases 1 and 2).
+
+**Design decisions and trade-offs**
+- **One feature per PR over one phase per PR** (the user's call): the user wants to ship something usable end to end. The PR is larger, but each phase is still designed, tested, and documented on its own, so the review can follow it phase by phase.
+- **Phase 2 is designed after phase 1 is built,** not now. This keeps "design before code" without front-loading the DB design before the scanner it consumes exists.
+
+**Files**
+- `CLAUDE.md`, `DOCUMENTATION/application/engines/file_engine.md`, `DOCUMENTATION/application/ARCHITECTURE.md`, `DOCUMENTATION/CHANGELOGS/README.md`, `DOCUMENTATION/CHANGELOGS/unreleased.md`.
+
+**Known limitations / follow-ups**
+- The user reviews `file_engine.md` again before phase 1 starts.
+- Write the phase 2 detailed design (DB, schema, settings persistence, `master_engine.md`) after phase 1 is built, and get it approved before coding phase 2.
+
+### Branch renamed to `abhinavp06/FILE_SCANNER_INIT`; settings and simplicity principles (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:**
+- The work so far was committed on `abhinavp06/file_engine_init` (`e5a7f20`). Development continues on the new feature branch `abhinavp06/FILE_SCANNER_INIT`, which delivers **file scanner v1**.
+- Following the user's direction, settings became a first-class design rule from the very first implementation, and "keep it simple" became a non-negotiable.
+- Documentation only.
+
+**Changed**
+- **Branch references:** every changelog entry and `CHANGELOGS/README.md` now name `abhinavp06/FILE_SCANNER_INIT`, as the user asked. For the record: commits up to and including `e5a7f20` were made on `abhinavp06/file_engine_init`, which still exists locally and on `origin`.
+- **`DOCUMENTATION/application/engines/file_engine.md`:**
+  - Phase 1 API: `KindMap` (class) and `ScanOptions` are replaced by one plain struct, `file::Settings` (`extension_kinds`, `ignored_names`, `ignored_prefixes`, `defaults()`), plus a free function `kind_of()`. `Scanner::open(root, settings)` lowercases its own copy.
+  - "Why so few types" rationale added. Files, tests, defaults, and the phase table updated to match.
+  - §2.2: roots are explicitly independent, with no common library folder (e.g. Music on HDD A, Movies on HDD B).
+  - New §2.5 "HDD vs SSD": same code, differences only in configuration and performance.
+  - Phase 2: settings persistence in SQLite. The sync settings join `file::Settings`.
+- **`DOCUMENTATION/application/ARCHITECTURE.md`:**
+  - new §3a **Settings**
+  - in §2, a table of **anticipated `core` components** (candidates with their triggering features and likelihood) and a list of what does *not* belong in `core`
+  - two decision-log rows
+- **`CLAUDE.md`:** "Customizable by design" expanded. A new **Keep it simple, no bloat** non-negotiable.
+
+**Design decisions and trade-offs**
+- **A plain `Settings` struct per engine over a settings class hierarchy or a key-value registry:**
+  - It's the least code, it's type-safe, and it's trivially testable.
+  - Phase 2 maps fields to SQLite rows.
+  - *Rejected:* a generic typed registry. It's more machinery than one engine needs. It can be revisited if many engines end up duplicating save and load code.
+- **No mocks for the DB in phase 1:** the scanner never touches the database, so there's nothing to mock. The only DB-bound piece is settings persistence, which is a comment until phase 2. Introducing SQLite on this branch was considered (the user allowed it if mocks proved costly) and isn't needed for phase 1.
+- **`kind_of` is a free function, not a `KindMap` class:** it's a pure lookup over settings data, so a class adds nothing.
+
+**Files**
+- `DOCUMENTATION/application/engines/file_engine.md`, `DOCUMENTATION/application/ARCHITECTURE.md`, `CLAUDE.md`, `DOCUMENTATION/CHANGELOGS/README.md`, `DOCUMENTATION/CHANGELOGS/unreleased.md`.
+
+**Known limitations / follow-ups**
+- Open: should phase 2 (SQLite, DB design, roots, Sync) also land on this branch, or in its own branch/PR?
+- The user reviews code after phase 1 is implemented.
+
+### Changelog split into per-version files (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** Replaced the single `DOCUMENTATION/CHANGELOG.md` with a `DOCUMENTATION/CHANGELOGS/` folder: one file per version, an `unreleased.md` for work in progress, and a README with the index, versioning rules, release steps, and the entry template. The user didn't want one giant file. No entry text was changed.
 
@@ -28,7 +125,7 @@ Work that is done but not yet part of a version. The newest entries come first. 
 **Known limitations / follow-ups**
 - Cut `v0.1.0` (create `v0.1.0.md` and add an index row) in the PR that merges this branch.
 
-### File engine: hoardor owns background sync; playback-stutter open item (2026-10-01, branch `abhinavp06/file_engine_init`)
+### File engine: hoardor owns background sync; playback-stutter open item (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** On the user's question, reversed the proposal that the caller owns the sync thread. hoardor now owns background execution through the `master` engine, and engine functions stay blocking. Also recorded "playback stutter during a sync" as an important open item, with an estimate, levers, and a measurement plan. Documentation only.
 
@@ -59,7 +156,7 @@ Work that is done but not yet part of a version. The newest entries come first. 
 - Write `engines/master_engine.md` when phase 2 is detailed.
 - The user's review of `file_engine.md` is still pending before phase 1 starts.
 
-### File engine: open questions resolved, background sync (2026-10-01, branch `abhinavp06/file_engine_init`)
+### File engine: open questions resolved, background sync (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** The user answered all four open design questions. Sync is now defined to always run in the background, and its consequences are documented. Documentation only. `file_engine.md` awaits the user's final review before phase 1 implementation starts.
 
@@ -91,7 +188,7 @@ Work that is done but not yet part of a version. The newest entries come first. 
 - Phase 2 must benchmark the sync batch size against the 50 ms target.
 - The metadata engines' background work (tag reading) will probably be the first real need for a `core` job queue. That gets decided when those engines are designed.
 
-### File engine: Sync by category (2026-10-01, branch `abhinavp06/file_engine_init`)
+### File engine: Sync by category (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** Aligned the scanning design with how the user will actually use the app. Categories and their directories are configured once. A **Sync** button in each UI section syncs that category, and a global Sync syncs everything. Folder-level scans are dropped. Documentation only.
 
@@ -120,7 +217,7 @@ Work that is done but not yet part of a version. The newest entries come first. 
 **Known limitations / follow-ups**
 - The user still needs to review `file_engine.md` and answer its §10 questions.
 
-### File engine: on-demand scanning and storage model (2026-10-01, branch `abhinavp06/file_engine_init`)
+### File engine: on-demand scanning and storage model (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** Replaced realtime watching with on-demand scanning. Redesigned the file engine so the library can live on external HDDs today and on RAID, a NAS, or a home server later without code changes. Documentation only. The design doc is still Proposed and awaits the user's review.
 
@@ -175,7 +272,7 @@ Work that is done but not yet part of a version. The newest entries come first. 
 - A hung NFS hard mount can block a scan thread uninterruptibly. Scans must run off the UI thread.
 - Until CI exists, all Windows behavior is verified by hand.
 
-### File engine design (phase 1 scope) and the `core` engine decision (2026-10-01, branch `abhinavp06/file_engine_init`)
+### File engine design (phase 1 scope) and the `core` engine decision (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** Scoped the file engine around its real consumers and narrowed the first phase to scanning. Recorded `core` as the home for shared infrastructure, built only on demand. No code changed. The design doc is a draft awaiting the user's approval.
 
@@ -218,7 +315,7 @@ Work that is done but not yet part of a version. The newest entries come first. 
 - The design doc awaits the user's approval before phase 1 implementation starts.
 - Open question: realtime watching vs on-demand scanning only. This affects whether phases 3 and 5 stay in the plan.
 
-### Project documentation and Claude context (2026-10-01, branch `abhinavp06/file_engine_init`)
+### Project documentation and Claude context (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** Set up the documentation structure and persistent Claude context, so architecture decisions and the workflow don't have to be re-explained every session.
 

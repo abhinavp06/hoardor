@@ -1,6 +1,6 @@
 # hoardor Architecture
 
-This is a living document. It records system-wide decisions and why they were made. Each engine's detailed design lives in `engines/<engine>.md`.
+This is a living document. It records system-wide decisions and why they were made. Each engine's long-lived reference lives in `engines/<engine>.md`, and each feature's plan lives in `features/<feature>.md`.
 
 Status markers: **Decided** means agreed with the user. **Proposed** means it still needs validation, for example by benchmarks.
 
@@ -32,6 +32,24 @@ hoardor is divided into engines, each in its own namespace with its own rules:
 
 **`core` is built on demand (Decided, 2026-10-01).** Infrastructure is added to `hoardor::core` only when a concrete feature needs it, and that feature is its first consumer. Nothing goes into `core` speculatively. Each addition gets a decision-log row naming the feature that required it. With on-demand scanning, no planned feature needs an event bus yet, so none is assumed.
 
+**Anticipated `core` components.** These are *candidates*, not commitments. Each is built only when the named feature actually needs it, and gets a decision-log row then.
+
+| Candidate | What it is | The feature that would trigger it | Likelihood |
+|---|---|---|---|
+| Background worker + job queue | A hoardor-owned thread that runs queued jobs, with stop and join on shutdown | Background Sync in `master` (file engine phase 2). Later, tag reading after a sync | High, and probably first |
+| Logging sink | A log function hoardor calls, with the host app (TYLI) deciding where the output goes | Background work that has to report problems nobody is waiting for | High |
+| Small shared helpers (UTF-8 path conversion, ASCII case-folding, file-time conversion) | Free functions, not classes | A second engine needing the same helper. Until then they stay private inside the file engine | Medium |
+| Lock-free ring buffer (single producer, single consumer) | A fixed-size buffer passing samples between threads without locks | Audio playback (decoder thread → audio output callback), visualizer | High, with the `audio` engine |
+| Thread pool | A few workers for parallel jobs | Per-volume parallel scans (file phase 4), parallel tag reading | Medium |
+| Event bus / dispatcher | Publish and subscribe between engines | Several engines reacting to the same change once callbacks routed by `master` stop being enough | Low for now |
+| Fast non-cryptographic hash | For partial fingerprints | File phase 3 (moves and renames), if another engine also needs hashing | Low |
+| Object pool / arena | Reuse of memory for hot paths | Only if a benchmark shows allocation cost in audio or video | Low |
+
+Things that look like infrastructure but **don't** belong in `core`:
+- **SQLite and settings persistence** go in `db` (mechanics) and each engine's repository.
+- **OS-specific code** (mount points, I/O priority, volume IDs) goes in each engine's `platform/` folder.
+- **Error and result types** come from the standard library (`std::expected`, `std::error_code`).
+
 ## 3. Persistence (Decided)
 
 - **One SQLite database file** for the whole library. Cross-engine joins (a track joined to its file) and atomic multi-engine transactions stay possible.
@@ -40,6 +58,14 @@ hoardor is divided into engines, each in its own namespace with its own rules:
 - **Writes are batched in transactions.** One transaction per batch is orders of magnitude faster than autocommit on every row. Background batches stay short (about 50 ms), so the user's own writes (play counts, ratings) are never blocked noticeably.
 - **The database lives on the machine's internal storage** (the app-data folder), never on a media drive. Media drives come and go, and SQLite's WAL mode doesn't work on network file systems.
 - **Tests run against real in-memory SQLite (`:memory:`).** Don't abstract repositories behind interfaces until a second implementation exists.
+
+## 3a. Settings (Decided, 2026-10-01)
+
+- **Start as configurable as possible, and prune later.** Anything a user might tune is a setting, not a constant. Settings that real use shows nobody touches can be removed later.
+- **Each engine has one plain `Settings` struct** (e.g. `file::Settings`) holding all of its tunables, with defaults in code (`Settings::defaults()`). It has no getters, setters, or settings classes: it's plain data that the engine reads.
+- **Settings are persisted in SQLite** in the engine's own tables (the `<engine>_` prefix, §3), through the engine's repository. This arrives with the first DB work (file engine phase 2). Until then, code that will load or save settings carries a comment saying so. No mocks.
+- **A value missing from the database falls back to the code default.** That way, new settings added in later versions just work with older databases.
+- **Configuration that is user data, not tuning,** gets its own tables designed with the engine: categories, library roots, and their per-root options.
 
 ## 4. Memory (Decided)
 
@@ -56,7 +82,7 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
   - Windows needs long-path (>260 characters) support.
   - Volumes come and go.
 
-## 6. File engine principles (Decided unless marked; details in `engines/file_engine.md`)
+## 6. File engine principles (Decided unless marked; details in `engines/file.md` and `features/file_sync.md`)
 
 - **Scanning is on demand, through Sync (Decided, 2026-10-01).** The user configures categories (Music, Movies, …) and assigns directories (roots) to each. A **Sync** of one category, which is a UI section, scans all of that category's roots. A global Sync scans every root. There are no folder-level scans. A startup sync is an opt-in setting. Every sync runs in the background, so startup never waits for it. A sync on drive plug-in comes later. Realtime watching is deferred. If it's ever added, it is only a hint that triggers a sync.
 - **The scan is the truth.** A stat-only scan compares path, size, and mtime against the database.
@@ -97,5 +123,9 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
 | 2026-10-01 | Root identity uses a `.hoardor-root` marker file. The name stays hoardor's, because hoardor must not depend on or know about TYLI. |
 | 2026-10-01 | Sync always runs in the background. A startup sync is a setting (default off). *Proposed, pending the user's review:* engine calls like `sync()` stay blocking, and the caller (TYLI, or a future daemon) owns the thread. hoardor owns no threads for now. |
 | 2026-10-01 | The mass-removal guard defaults to 25% of a root's entries and is configurable. |
+| 2026-10-01 | Settings: start as configurable as possible. One plain `Settings` struct per engine, defaults in code, persisted in SQLite (from file engine phase 2), with code defaults filling missing values. No mocks before the DB exists. |
+| 2026-10-01 | Docs split into `engines/<engine>.md` (long-lived engine reference) and `features/<feature>.md` (per-feature plan, may span engines). `engines/file_engine.md` became `engines/file.md` plus `features/file_sync.md`. |
+| 2026-10-01 | Branching: one feature branch is one shippable feature and one PR, built in phases that are each designed first. File scanner v1 = file engine phases 1 and 2 (SQLite, DB design, roots, background Sync) on `abhinavp06/FILE_SCANNER_INIT`. |
+| 2026-10-01 | Keep it simple: plain structs and free functions first. A class only when something holds state or invariants. An abstraction only when a second implementation exists. |
 | 2026-10-01 | *Proposed, pending the user's review, and replacing the caller-owns-the-thread proposal above:* hoardor owns background execution. Engine functions like `file::sync()` stay blocking and thread-agnostic. The `master` engine runs them on a hoardor-owned worker and enforces one sync per root, cancellation, I/O priority, and yielding to playback. Callbacks arrive on hoardor's thread. |
 | 2026-10-01 | The file engine starts with scanning only (phase 1: streaming scanner and configurable extension-to-kind map). Roots and persistence, move detection, and platform volume support follow in later phases. See `engines/file_engine.md`. |

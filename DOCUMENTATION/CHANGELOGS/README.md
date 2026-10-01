@@ -24,7 +24,7 @@ Newest version first. Add a row whenever a version is cut.
   - **PATCH:** fixes, documentation-only work, or build changes, with no new features.
   - **1.0.0:** cut when the user decides the public API is stable enough for TYLI to depend on.
 - **The single source of the version number** is `project(hoardor VERSION ...)` in the root `CMakeLists.txt`. The changelog file name must match it.
-- **The first version is `v0.1.0`.** It's cut when this branch (`abhinavp06/file_engine_init`: documentation plus file engine phase 1) merges into `master`.
+- **The first version is `v0.1.0`.** It's cut when this branch (`abhinavp06/FILE_SCANNER_INIT`: documentation plus file scanner v1, which is file engine phases 1 and 2) merges into `master`.
 
 ## Cutting a version
 
