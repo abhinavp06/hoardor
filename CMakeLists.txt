@@ -42,6 +42,7 @@ add_library(hoardor
     src/file/text.cpp
     src/file/scanner.cpp
     src/file/library.cpp
+    src/file/library_sync.cpp
     src/file/root_marker.cpp
 )
 

@@ -2,6 +2,7 @@
 
 #include <hoardor/db/database.hpp>
 #include <hoardor/file/mount_points.hpp>
+#include <hoardor/file/scanner.hpp>
 #include <hoardor/file/settings.hpp>
 
 #include <cstdint>
@@ -9,6 +10,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -75,6 +77,51 @@ struct Entry {
     std::int64_t changed_generation = 0;
 };
 
+struct ScanErrorRecord {
+    RootId root_id = 0;
+    std::string relative_path;  // empty: the whole root was lost during the sync
+    bool is_directory = false;
+    std::string message;
+    std::int64_t generation = 0;
+};
+
+enum class RootSyncOutcome {
+    Synced,     // scanned and reconciled (removals may still be held, see removals_held)
+    Offline,    // the storage wasn't there, was lost, or looked unmounted: nothing was removed
+    Cancelled,  // stopped by request: what was seen is saved, nothing was removed
+    Failed,     // something unexpected (e.g. a database error): see message
+};
+
+struct RootSyncReport {
+    RootId root_id = 0;
+    RootSyncOutcome outcome = RootSyncOutcome::Failed;
+    std::int64_t generation = 0;  // page through changed_entries(root_id, generation)
+    std::uint64_t added = 0;
+    std::uint64_t modified = 0;  // includes files that just became settled
+    std::uint64_t removed = 0;
+    std::uint64_t unchanged = 0;
+    std::uint64_t unsettled = 0;
+    std::uint64_t errors = 0;  // see scan_errors(root_id)
+    bool relocated = false;    // the root was found at a new location
+    bool removals_held = false;
+    std::uint64_t held_removals = 0;
+    std::string message;  // why it's offline, cancelled, or failed, in plain words
+};
+
+struct SyncReport {
+    std::vector<RootSyncReport> roots;
+    bool cancelled = false;
+};
+
+struct SyncProgress {
+    std::size_t root_index = 0;  // 0-based position of the root being synced
+    std::size_t root_count = 0;
+    RootId root_id = 0;
+    ScanProgress scan;  // the scanner's counters for this root so far
+};
+
+using ProgressCallback = std::function<void(const SyncProgress&)>;
+
 // The file engine's repository and logic, on one database connection.
 // Use a Library from one thread at a time (its Database's thread).
 class Library {
@@ -109,10 +156,26 @@ public:
     // Points a root at its new location, verified by its marker (or, without one, by a sample of entries).
     Result<Root> relocate_root(RootId id, const std::filesystem::path& new_path);
 
+    // ---- Sync (features/file_sync.md §4.6) ----
+
+    // Syncs every root of one category, or every root, one at a time. Blocking:
+    // run it on a background thread (master::SyncWorker does). The progress
+    // callback runs on the calling thread, never inside a write transaction.
+    SyncReport sync(std::optional<CategoryId> category = std::nullopt, std::stop_token stop = {},
+                    const ProgressCallback& progress = {});
+    RootSyncReport sync_root(RootId id, std::stop_token stop = {}, const ProgressCallback& progress = {});
+    // Applies removals that a sync held back by the mass-removal guard. Returns how many were removed.
+    Result<std::uint64_t> apply_held_removals(RootId id);
+
     // ---- Reads ----
 
     // Paged by id, ascending, so consumers never load everything.
     Result<std::vector<Entry>> entries(RootId root, EntryId after = 0, std::size_t limit = 500);
+    // The entries added or changed by one sync (RootSyncReport::generation), paged by id.
+    Result<std::vector<Entry>> changed_entries(RootId root, std::int64_t generation, EntryId after = 0,
+                                               std::size_t limit = 500);
+    // What the last sync of this root couldn't read (up to `limit`).
+    Result<std::vector<ScanErrorRecord>> scan_errors(RootId root, std::size_t limit = 500);
     // For playback: the file's current absolute path, or RootOffline / FileMissing.
     // Touches the drive (resolves the root), so never call it just to display the library.
     Result<std::filesystem::path> resolve(EntryId entry);
@@ -130,6 +193,8 @@ private:
     Result<void> check_overlap(const std::filesystem::path& path, std::optional<RootId> except);
     // Finds the root's storage (engines/file.md §2.3) and records a relocation.
     Result<Resolution> resolve_root(Root& root);
+    RootSyncReport sync_one(RootId id, std::stop_token stop, const ProgressCallback& progress, std::size_t index,
+                            std::size_t count);
 
     db::Database* db_;
     MountPointLister mounts_;
