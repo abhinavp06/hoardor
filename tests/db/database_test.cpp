@@ -63,7 +63,8 @@ TEST(Statement, BindsAndReadsEveryType) {
     ASSERT_TRUE(db.exec("CREATE TABLE t (i INTEGER, d REAL, s TEXT, n TEXT)"));
     auto insert = db.prepare("INSERT INTO t VALUES (?, ?, ?, ?)");
     ASSERT_TRUE(insert.has_value());
-    const std::string text("caf\xC3\xA9 \xF0\x9F\x8E\xB5 with\0nul", 22);
+    const char raw[] = "caf\xC3\xA9 \xF0\x9F\x8E\xB5 with\0nul";
+    const std::string text(raw, sizeof(raw) - 1);  // keeps the embedded NUL
     insert->bind(1, std::int64_t{9'000'000'000'000'000'000}).bind(2, 2.5).bind(3, std::string_view(text)).bind_null(4);
     ASSERT_TRUE(insert->run());
     EXPECT_EQ(db.changes(), 1);

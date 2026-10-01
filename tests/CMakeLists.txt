@@ -15,6 +15,7 @@ add_executable(hoardor_tests
     file/scanner_test.cpp
     file/library_test.cpp
     file/sync_test.cpp
+    master/sync_worker_test.cpp
 )
 
 target_link_libraries(hoardor_tests PRIVATE hoardor GTest::gtest_main)

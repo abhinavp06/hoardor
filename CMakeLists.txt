@@ -44,6 +44,9 @@ add_library(hoardor
     src/file/library.cpp
     src/file/library_sync.cpp
     src/file/root_marker.cpp
+
+    # MASTER ENGINE
+    src/master/sync_worker.cpp
 )
 
 # One mount-point backend per OS (the only platform-specific file so far).
@@ -62,7 +65,8 @@ target_include_directories(hoardor
         src
 )
 
-target_link_libraries(hoardor PRIVATE hoardor_sqlite3)
+find_package(Threads REQUIRED)
+target_link_libraries(hoardor PRIVATE hoardor_sqlite3 PUBLIC Threads::Threads)
 
 if(MSVC)
     target_compile_options(hoardor PRIVATE /W4 /permissive- /utf-8)

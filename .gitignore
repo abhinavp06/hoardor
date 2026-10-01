@@ -1,6 +1,6 @@
 *.exe
 /.vs
-/build
+/build*/
 /out
 /output/*
 !/output/.gitkeep
