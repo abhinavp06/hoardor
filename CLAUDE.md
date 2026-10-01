@@ -72,7 +72,7 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-Build options in the root `CMakeLists.txt`: `BUILD_PLAYGROUND`, `BUILD_TESTS`, `RUN_TESTS_AFTER_BUILD`, `BUILD_BENCHMARKS` (default OFF). Build output goes to `build*/` (git-ignored).
+Build options in the root `CMakeLists.txt`: `BUILD_PLAYGROUND`, `BUILD_TESTS`, `RUN_TESTS_AFTER_BUILD` (default ON when hoardor is built on its own, OFF when an app such as TYLI adds it with `add_subdirectory`), `BUILD_BENCHMARKS` (default OFF). Build output goes to `build*/` (git-ignored).
 
 ```bash
 # Benchmarks (always Release)

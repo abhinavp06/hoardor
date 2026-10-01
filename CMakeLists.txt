@@ -13,7 +13,7 @@ project(
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(HOARDOR_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/output/")
+set(HOARDOR_OUTPUT_DIR "${PROJECT_SOURCE_DIR}/output/")
 
 # Third-party code is downloaded at configure time into the build directory.
 include(FetchContent)
@@ -22,9 +22,12 @@ include(FetchContent)
 # Build Options
 # -----------------------------------------------------------------------------
 
-option(BUILD_PLAYGROUND "Build playground executable" ON)
-option(BUILD_TESTS "Build unit tests" ON)
-option(RUN_TESTS_AFTER_BUILD "Run unit tests after a successful build" ON)
+# PROJECT_IS_TOP_LEVEL is true only when hoardor itself is being built. When an app
+# (e.g. TYLI) adds hoardor with add_subdirectory, these default to OFF, so only the
+# library is built there. Any of them can still be turned on explicitly.
+option(BUILD_PLAYGROUND "Build playground executable" ${PROJECT_IS_TOP_LEVEL})
+option(BUILD_TESTS "Build unit tests" ${PROJECT_IS_TOP_LEVEL})
+option(RUN_TESTS_AFTER_BUILD "Run unit tests after a successful build" ${PROJECT_IS_TOP_LEVEL})
 option(BUILD_BENCHMARKS "Build Google Benchmark targets (use a Release build)" OFF)
 
 # -----------------------------------------------------------------------------

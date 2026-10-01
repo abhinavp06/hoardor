@@ -2,6 +2,23 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### hoardor as a subproject of TYLI (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:** TYLI consumes hoardor with `add_subdirectory(../hoardor)` (the user's decision, for side-by-side development). hoardor's test, playground, and run-tests options now default to ON only when hoardor is the top-level project, so a TYLI build compiles only the library and SQLite.
+
+**Changed**
+- `CMakeLists.txt`:
+  - `BUILD_PLAYGROUND`, `BUILD_TESTS`, and `RUN_TESTS_AFTER_BUILD` default to `${PROJECT_IS_TOP_LEVEL}` (CMake ≥ 3.21). They can still be turned on explicitly from a parent project.
+  - `HOARDOR_OUTPUT_DIR` uses `PROJECT_SOURCE_DIR` instead of `CMAKE_SOURCE_DIR`, which would point at the parent project.
+- `CLAUDE.md` (build options) and `CODE_TREE.md` (options line), with the HTML regenerated.
+
+**Design decisions and trade-offs**
+- **`add_subdirectory` now, a pinned tag later:** a hoardor change shows up in TYLI right away while both are developed together. Once releases settle, TYLI can switch to `FetchContent` pinned to a hoardor tag without hoardor changing.
+
+**Tests**
+- hoardor on its own still builds and passes 109 of 109.
+- A throwaway project added hoardor with `add_subdirectory`. Only `hoardor_sqlite3` and `hoardor` were built (no GoogleTest download, no tests), and a program linking it ran `Library::open` successfully.
+
 ### Workspace with TYLI (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** hoardor moved from `/root/hoardor` into a workspace next to the TYLI app: `/root/tyli-workspace/{hoardor, tyli}`. Nothing inside the repository depended on the old location. Only the build folders, Claude's memory, and which `CLAUDE.md` loads at session start were affected.

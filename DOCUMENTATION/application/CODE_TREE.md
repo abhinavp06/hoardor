@@ -14,7 +14,7 @@ hoardor/
 ├── README.md                                   (empty)
 ├── .gitignore                                  build*/, output/, IDE folders
 ├── CMakeLists.txt                              root build
-│   ├── options        BUILD_PLAYGROUND=ON, BUILD_TESTS=ON, RUN_TESTS_AFTER_BUILD=ON, BUILD_BENCHMARKS=OFF
+│   ├── options        BUILD_PLAYGROUND, BUILD_TESTS, RUN_TESTS_AFTER_BUILD (ON only when hoardor is the top-level project), BUILD_BENCHMARKS=OFF
 │   ├── target hoardor (static library)         src/db, src/file, src/master; links hoardor_sqlite3 (private), Threads
 │   └── platform sources                        Windows: *_windows.cpp · Linux: file_info_posix + mount_points_linux · other: file_info_posix + mount_points_other
 │
