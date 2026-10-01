@@ -1,6 +1,6 @@
 #include <hoardor/file/scanner.hpp>
 
-#include "file/file_time.hpp"
+#include "file/platform/file_info.hpp"
 #include "file/text.hpp"
 
 namespace hoardor::file {
@@ -137,19 +137,14 @@ std::optional<ScanResult> Scanner::next() {
             continue;
         }
 
-        const std::uintmax_t size = entry.file_size(ec);
-        if (ec) {
-            if (auto result = on_error(relative, ec, false)) return result;
-            continue;
-        }
-        const fs::file_time_type mtime = entry.last_write_time(ec);
-        if (ec) {
-            if (auto result = on_error(relative, ec, false)) return result;
+        const auto info = detail::file_info(entry);
+        if (!info) {
+            if (auto result = on_error(relative, info.error(), false)) return result;
             continue;
         }
 
         ++progress_.files_emitted;
-        return ScanResult{ScannedFile{detail::to_utf8(relative).text, size, detail::to_unix_ns(mtime), kind->second}};
+        return ScanResult{ScannedFile{detail::to_utf8(relative).text, info->size, info->mtime_ns, kind->second}};
     }
     finished_ = true;
     stack_.clear();

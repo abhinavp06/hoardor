@@ -1,6 +1,8 @@
 file(REMOVE_RECURSE
   "CMakeFiles/hoardor_benchmarks.dir/file/scanner_benchmark.cpp.o"
   "CMakeFiles/hoardor_benchmarks.dir/file/scanner_benchmark.cpp.o.d"
+  "CMakeFiles/hoardor_benchmarks.dir/file/sync_benchmark.cpp.o"
+  "CMakeFiles/hoardor_benchmarks.dir/file/sync_benchmark.cpp.o.d"
   "hoardor_benchmarks"
   "hoardor_benchmarks.pdb"
 )

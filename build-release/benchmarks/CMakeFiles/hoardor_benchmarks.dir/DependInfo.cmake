@@ -9,6 +9,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/root/hoardor/benchmarks/file/scanner_benchmark.cpp" "benchmarks/CMakeFiles/hoardor_benchmarks.dir/file/scanner_benchmark.cpp.o" "gcc" "benchmarks/CMakeFiles/hoardor_benchmarks.dir/file/scanner_benchmark.cpp.o.d"
+  "/root/hoardor/benchmarks/file/sync_benchmark.cpp" "benchmarks/CMakeFiles/hoardor_benchmarks.dir/file/sync_benchmark.cpp.o" "gcc" "benchmarks/CMakeFiles/hoardor_benchmarks.dir/file/sync_benchmark.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

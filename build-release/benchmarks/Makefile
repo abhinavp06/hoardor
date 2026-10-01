@@ -154,6 +154,30 @@ file/scanner_benchmark.cpp.s:
 	cd /root/hoardor/build-release && $(MAKE) $(MAKESILENT) -f benchmarks/CMakeFiles/hoardor_benchmarks.dir/build.make benchmarks/CMakeFiles/hoardor_benchmarks.dir/file/scanner_benchmark.cpp.s
 .PHONY : file/scanner_benchmark.cpp.s
 
+file/sync_benchmark.o: file/sync_benchmark.cpp.o
+.PHONY : file/sync_benchmark.o
+
+# target to build an object file
+file/sync_benchmark.cpp.o:
+	cd /root/hoardor/build-release && $(MAKE) $(MAKESILENT) -f benchmarks/CMakeFiles/hoardor_benchmarks.dir/build.make benchmarks/CMakeFiles/hoardor_benchmarks.dir/file/sync_benchmark.cpp.o
+.PHONY : file/sync_benchmark.cpp.o
+
+file/sync_benchmark.i: file/sync_benchmark.cpp.i
+.PHONY : file/sync_benchmark.i
+
+# target to preprocess a source file
+file/sync_benchmark.cpp.i:
+	cd /root/hoardor/build-release && $(MAKE) $(MAKESILENT) -f benchmarks/CMakeFiles/hoardor_benchmarks.dir/build.make benchmarks/CMakeFiles/hoardor_benchmarks.dir/file/sync_benchmark.cpp.i
+.PHONY : file/sync_benchmark.cpp.i
+
+file/sync_benchmark.s: file/sync_benchmark.cpp.s
+.PHONY : file/sync_benchmark.s
+
+# target to generate assembly for a file
+file/sync_benchmark.cpp.s:
+	cd /root/hoardor/build-release && $(MAKE) $(MAKESILENT) -f benchmarks/CMakeFiles/hoardor_benchmarks.dir/build.make benchmarks/CMakeFiles/hoardor_benchmarks.dir/file/sync_benchmark.cpp.s
+.PHONY : file/sync_benchmark.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -166,6 +190,9 @@ help:
 	@echo "... file/scanner_benchmark.o"
 	@echo "... file/scanner_benchmark.i"
 	@echo "... file/scanner_benchmark.s"
+	@echo "... file/sync_benchmark.o"
+	@echo "... file/sync_benchmark.i"
+	@echo "... file/sync_benchmark.s"
 .PHONY : help
 
 

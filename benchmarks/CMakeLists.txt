@@ -10,6 +10,7 @@ FetchContent_MakeAvailable(googlebenchmark)
 
 add_executable(hoardor_benchmarks
     file/scanner_benchmark.cpp
+    file/sync_benchmark.cpp
 )
 target_link_libraries(hoardor_benchmarks PRIVATE hoardor benchmark::benchmark_main)
 target_include_directories(hoardor_benchmarks PRIVATE ${PROJECT_SOURCE_DIR}/tests)

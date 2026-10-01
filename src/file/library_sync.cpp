@@ -34,6 +34,7 @@ Result<std::int64_t> count_entries(db::Database& db, RootId id, std::string_view
 
 // The statements one sync reuses for every file, prepared once.
 struct Statements {
+    db::Statement touch_unchanged;
     db::Statement find;
     db::Statement insert;
     db::Statement update_changed;
@@ -43,6 +44,11 @@ struct Statements {
     db::Statement record_error;
 
     static Result<Statements> prepare(db::Database& db) {
+        // The common case in one statement: stamp the file as seen only if nothing about it
+        // changed (and it isn't just settling). 0 rows changed -> take the full path.
+        auto touch_unchanged = db.prepare("UPDATE file_entries SET seen_generation = ? WHERE root_id = ? AND path_key = ? "
+                                          "AND size = ? AND mtime_ns = ? AND kind = ? AND relative_path = ? "
+                                          "AND unsettled = ?");
         auto find = db.prepare("SELECT id, size, mtime_ns, kind, relative_path, unsettled FROM file_entries "
                                "WHERE root_id = ? AND path_key = ?");
         auto insert = db.prepare("INSERT INTO file_entries (root_id, relative_path, path_key, size, mtime_ns, kind, "
@@ -56,10 +62,10 @@ struct Statements {
         auto touch_one = db.prepare("UPDATE file_entries SET seen_generation = ? WHERE root_id = ? AND path_key = ?");
         auto record_error = db.prepare("INSERT INTO file_scan_errors (root_id, relative_path, is_directory, message, "
                                        "generation) VALUES (?, ?, ?, ?, ?)");
-        for (auto* st : {&find, &insert, &update_changed, &update_seen, &touch_subtree, &touch_one, &record_error}) {
+        for (auto* st : {&touch_unchanged, &find, &insert, &update_changed, &update_seen, &touch_subtree, &touch_one, &record_error}) {
             if (!*st) return std::unexpected(database_error(st->error()));
         }
-        return Statements{std::move(*find),          std::move(*insert),    std::move(*update_changed),
+        return Statements{std::move(*touch_unchanged), std::move(*find),          std::move(*insert),    std::move(*update_changed),
                           std::move(*update_seen),   std::move(*touch_subtree), std::move(*touch_one),
                           std::move(*record_error)};
     }
@@ -193,10 +199,27 @@ RootSyncReport Library::sync_one(RootId id, std::stop_token stop, const Progress
             const auto size = static_cast<std::int64_t>(file.size);
             const auto kind = static_cast<std::int64_t>(file.kind);
 
-            st.find.bind(1, id).bind(2, std::string_view(key));
-            auto found = st.find.step();
-            if (!found) return finish(RootSyncOutcome::Failed, found.error().message);
-            if (!*found) {
+            st.touch_unchanged.bind(1, generation)
+                .bind(2, id)
+                .bind(3, std::string_view(key))
+                .bind(4, size)
+                .bind(5, file.mtime_ns)
+                .bind(6, kind)
+                .bind(7, std::string_view(file.relative_path))
+                .bind(8, unsettled ? 1 : 0);
+            if (auto r = run(st.touch_unchanged); !r) return finish(RootSyncOutcome::Failed, r.error().message);
+            const bool unchanged = db_->changes() == 1;
+
+            bool found = false;
+            if (!unchanged) {
+                st.find.bind(1, id).bind(2, std::string_view(key));
+                auto step = st.find.step();
+                if (!step) return finish(RootSyncOutcome::Failed, step.error().message);
+                found = *step;
+            }
+            if (unchanged) {
+                ++report.unchanged;
+            } else if (!found) {
                 st.find.reset();
                 st.insert.bind(1, id)
                     .bind(2, std::string_view(file.relative_path))

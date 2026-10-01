@@ -1,6 +1,9 @@
 /root/hoardor/build-release/CMakeFiles/hoardor.dir
 /root/hoardor/build-release/CMakeFiles/edit_cache.dir
 /root/hoardor/build-release/CMakeFiles/rebuild_cache.dir
+/root/hoardor/build-release/third_party/CMakeFiles/hoardor_sqlite3.dir
+/root/hoardor/build-release/third_party/CMakeFiles/edit_cache.dir
+/root/hoardor/build-release/third_party/CMakeFiles/rebuild_cache.dir
 /root/hoardor/build-release/benchmarks/CMakeFiles/hoardor_benchmarks.dir
 /root/hoardor/build-release/benchmarks/CMakeFiles/edit_cache.dir
 /root/hoardor/build-release/benchmarks/CMakeFiles/rebuild_cache.dir

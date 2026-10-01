@@ -64,15 +64,18 @@ CMAKE_BINARY_DIR = /root/hoardor/build-release
 
 # The main recursive "all" target.
 all: CMakeFiles/hoardor.dir/all
+all: third_party/all
 all: benchmarks/all
 .PHONY : all
 
 # The main recursive "preinstall" target.
+preinstall: third_party/preinstall
 preinstall: benchmarks/preinstall
 .PHONY : preinstall
 
 # The main recursive "clean" target.
 clean: CMakeFiles/hoardor.dir/clean
+clean: third_party/clean
 clean: benchmarks/clean
 .PHONY : clean
 
@@ -126,18 +129,33 @@ benchmarks/clean: _deps/googlebenchmark-build/clean
 .PHONY : benchmarks/clean
 
 #=============================================================================
+# Directory level rules for directory third_party
+
+# Recursive "all" directory target.
+third_party/all: third_party/CMakeFiles/hoardor_sqlite3.dir/all
+.PHONY : third_party/all
+
+# Recursive "preinstall" directory target.
+third_party/preinstall:
+.PHONY : third_party/preinstall
+
+# Recursive "clean" directory target.
+third_party/clean: third_party/CMakeFiles/hoardor_sqlite3.dir/clean
+.PHONY : third_party/clean
+
+#=============================================================================
 # Target rules for target CMakeFiles/hoardor.dir
 
 # All Build rule for target.
-CMakeFiles/hoardor.dir/all:
+CMakeFiles/hoardor.dir/all: third_party/CMakeFiles/hoardor_sqlite3.dir/all
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=23,24,25,26 "Built target hoardor"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=23,24,25,26,27,28,29,30,31,32,33 "Built target hoardor"
 .PHONY : CMakeFiles/hoardor.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/hoardor.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /root/hoardor/build-release/CMakeFiles 4
+	$(CMAKE_COMMAND) -E cmake_progress_start /root/hoardor/build-release/CMakeFiles 13
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/hoardor.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /root/hoardor/build-release/CMakeFiles 0
 .PHONY : CMakeFiles/hoardor.dir/rule
@@ -152,20 +170,47 @@ CMakeFiles/hoardor.dir/clean:
 .PHONY : CMakeFiles/hoardor.dir/clean
 
 #=============================================================================
+# Target rules for target third_party/CMakeFiles/hoardor_sqlite3.dir
+
+# All Build rule for target.
+third_party/CMakeFiles/hoardor_sqlite3.dir/all:
+	$(MAKE) $(MAKESILENT) -f third_party/CMakeFiles/hoardor_sqlite3.dir/build.make third_party/CMakeFiles/hoardor_sqlite3.dir/depend
+	$(MAKE) $(MAKESILENT) -f third_party/CMakeFiles/hoardor_sqlite3.dir/build.make third_party/CMakeFiles/hoardor_sqlite3.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=37,38 "Built target hoardor_sqlite3"
+.PHONY : third_party/CMakeFiles/hoardor_sqlite3.dir/all
+
+# Build rule for subdir invocation for target.
+third_party/CMakeFiles/hoardor_sqlite3.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /root/hoardor/build-release/CMakeFiles 2
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 third_party/CMakeFiles/hoardor_sqlite3.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /root/hoardor/build-release/CMakeFiles 0
+.PHONY : third_party/CMakeFiles/hoardor_sqlite3.dir/rule
+
+# Convenience name for target.
+hoardor_sqlite3: third_party/CMakeFiles/hoardor_sqlite3.dir/rule
+.PHONY : hoardor_sqlite3
+
+# clean rule for target.
+third_party/CMakeFiles/hoardor_sqlite3.dir/clean:
+	$(MAKE) $(MAKESILENT) -f third_party/CMakeFiles/hoardor_sqlite3.dir/build.make third_party/CMakeFiles/hoardor_sqlite3.dir/clean
+.PHONY : third_party/CMakeFiles/hoardor_sqlite3.dir/clean
+
+#=============================================================================
 # Target rules for target benchmarks/CMakeFiles/hoardor_benchmarks.dir
 
 # All Build rule for target.
-benchmarks/CMakeFiles/hoardor_benchmarks.dir/all: _deps/googlebenchmark-build/src/CMakeFiles/benchmark.dir/all
 benchmarks/CMakeFiles/hoardor_benchmarks.dir/all: CMakeFiles/hoardor.dir/all
+benchmarks/CMakeFiles/hoardor_benchmarks.dir/all: third_party/CMakeFiles/hoardor_sqlite3.dir/all
+benchmarks/CMakeFiles/hoardor_benchmarks.dir/all: _deps/googlebenchmark-build/src/CMakeFiles/benchmark.dir/all
 benchmarks/CMakeFiles/hoardor_benchmarks.dir/all: _deps/googlebenchmark-build/src/CMakeFiles/benchmark_main.dir/all
 	$(MAKE) $(MAKESILENT) -f benchmarks/CMakeFiles/hoardor_benchmarks.dir/build.make benchmarks/CMakeFiles/hoardor_benchmarks.dir/depend
 	$(MAKE) $(MAKESILENT) -f benchmarks/CMakeFiles/hoardor_benchmarks.dir/build.make benchmarks/CMakeFiles/hoardor_benchmarks.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=27,28 "Built target hoardor_benchmarks"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=34,35,36 "Built target hoardor_benchmarks"
 .PHONY : benchmarks/CMakeFiles/hoardor_benchmarks.dir/all
 
 # Build rule for subdir invocation for target.
 benchmarks/CMakeFiles/hoardor_benchmarks.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /root/hoardor/build-release/CMakeFiles 28
+	$(CMAKE_COMMAND) -E cmake_progress_start /root/hoardor/build-release/CMakeFiles 38
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 benchmarks/CMakeFiles/hoardor_benchmarks.dir/all
 	$(CMAKE_COMMAND) -E cmake_progress_start /root/hoardor/build-release/CMakeFiles 0
 .PHONY : benchmarks/CMakeFiles/hoardor_benchmarks.dir/rule

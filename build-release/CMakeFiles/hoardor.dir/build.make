@@ -69,10 +69,24 @@ include CMakeFiles/hoardor.dir/progress.make
 # Include the compile flags for this target's objects.
 include CMakeFiles/hoardor.dir/flags.make
 
+CMakeFiles/hoardor.dir/src/db/database.cpp.o: CMakeFiles/hoardor.dir/flags.make
+CMakeFiles/hoardor.dir/src/db/database.cpp.o: /root/hoardor/src/db/database.cpp
+CMakeFiles/hoardor.dir/src/db/database.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/hoardor.dir/src/db/database.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/db/database.cpp.o -MF CMakeFiles/hoardor.dir/src/db/database.cpp.o.d -o CMakeFiles/hoardor.dir/src/db/database.cpp.o -c /root/hoardor/src/db/database.cpp
+
+CMakeFiles/hoardor.dir/src/db/database.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/hoardor.dir/src/db/database.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /root/hoardor/src/db/database.cpp > CMakeFiles/hoardor.dir/src/db/database.cpp.i
+
+CMakeFiles/hoardor.dir/src/db/database.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/hoardor.dir/src/db/database.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /root/hoardor/src/db/database.cpp -o CMakeFiles/hoardor.dir/src/db/database.cpp.s
+
 CMakeFiles/hoardor.dir/src/file/settings.cpp.o: CMakeFiles/hoardor.dir/flags.make
 CMakeFiles/hoardor.dir/src/file/settings.cpp.o: /root/hoardor/src/file/settings.cpp
 CMakeFiles/hoardor.dir/src/file/settings.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/hoardor.dir/src/file/settings.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/hoardor.dir/src/file/settings.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/file/settings.cpp.o -MF CMakeFiles/hoardor.dir/src/file/settings.cpp.o.d -o CMakeFiles/hoardor.dir/src/file/settings.cpp.o -c /root/hoardor/src/file/settings.cpp
 
 CMakeFiles/hoardor.dir/src/file/settings.cpp.i: cmake_force
@@ -86,7 +100,7 @@ CMakeFiles/hoardor.dir/src/file/settings.cpp.s: cmake_force
 CMakeFiles/hoardor.dir/src/file/text.cpp.o: CMakeFiles/hoardor.dir/flags.make
 CMakeFiles/hoardor.dir/src/file/text.cpp.o: /root/hoardor/src/file/text.cpp
 CMakeFiles/hoardor.dir/src/file/text.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/hoardor.dir/src/file/text.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/hoardor.dir/src/file/text.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/file/text.cpp.o -MF CMakeFiles/hoardor.dir/src/file/text.cpp.o.d -o CMakeFiles/hoardor.dir/src/file/text.cpp.o -c /root/hoardor/src/file/text.cpp
 
 CMakeFiles/hoardor.dir/src/file/text.cpp.i: cmake_force
@@ -100,7 +114,7 @@ CMakeFiles/hoardor.dir/src/file/text.cpp.s: cmake_force
 CMakeFiles/hoardor.dir/src/file/scanner.cpp.o: CMakeFiles/hoardor.dir/flags.make
 CMakeFiles/hoardor.dir/src/file/scanner.cpp.o: /root/hoardor/src/file/scanner.cpp
 CMakeFiles/hoardor.dir/src/file/scanner.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/hoardor.dir/src/file/scanner.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/hoardor.dir/src/file/scanner.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/file/scanner.cpp.o -MF CMakeFiles/hoardor.dir/src/file/scanner.cpp.o.d -o CMakeFiles/hoardor.dir/src/file/scanner.cpp.o -c /root/hoardor/src/file/scanner.cpp
 
 CMakeFiles/hoardor.dir/src/file/scanner.cpp.i: cmake_force
@@ -111,21 +125,119 @@ CMakeFiles/hoardor.dir/src/file/scanner.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/hoardor.dir/src/file/scanner.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /root/hoardor/src/file/scanner.cpp -o CMakeFiles/hoardor.dir/src/file/scanner.cpp.s
 
+CMakeFiles/hoardor.dir/src/file/library.cpp.o: CMakeFiles/hoardor.dir/flags.make
+CMakeFiles/hoardor.dir/src/file/library.cpp.o: /root/hoardor/src/file/library.cpp
+CMakeFiles/hoardor.dir/src/file/library.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/hoardor.dir/src/file/library.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/file/library.cpp.o -MF CMakeFiles/hoardor.dir/src/file/library.cpp.o.d -o CMakeFiles/hoardor.dir/src/file/library.cpp.o -c /root/hoardor/src/file/library.cpp
+
+CMakeFiles/hoardor.dir/src/file/library.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/hoardor.dir/src/file/library.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /root/hoardor/src/file/library.cpp > CMakeFiles/hoardor.dir/src/file/library.cpp.i
+
+CMakeFiles/hoardor.dir/src/file/library.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/hoardor.dir/src/file/library.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /root/hoardor/src/file/library.cpp -o CMakeFiles/hoardor.dir/src/file/library.cpp.s
+
+CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o: CMakeFiles/hoardor.dir/flags.make
+CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o: /root/hoardor/src/file/library_sync.cpp
+CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o -MF CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o.d -o CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o -c /root/hoardor/src/file/library_sync.cpp
+
+CMakeFiles/hoardor.dir/src/file/library_sync.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/hoardor.dir/src/file/library_sync.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /root/hoardor/src/file/library_sync.cpp > CMakeFiles/hoardor.dir/src/file/library_sync.cpp.i
+
+CMakeFiles/hoardor.dir/src/file/library_sync.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/hoardor.dir/src/file/library_sync.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /root/hoardor/src/file/library_sync.cpp -o CMakeFiles/hoardor.dir/src/file/library_sync.cpp.s
+
+CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o: CMakeFiles/hoardor.dir/flags.make
+CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o: /root/hoardor/src/file/root_marker.cpp
+CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o -MF CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o.d -o CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o -c /root/hoardor/src/file/root_marker.cpp
+
+CMakeFiles/hoardor.dir/src/file/root_marker.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/hoardor.dir/src/file/root_marker.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /root/hoardor/src/file/root_marker.cpp > CMakeFiles/hoardor.dir/src/file/root_marker.cpp.i
+
+CMakeFiles/hoardor.dir/src/file/root_marker.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/hoardor.dir/src/file/root_marker.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /root/hoardor/src/file/root_marker.cpp -o CMakeFiles/hoardor.dir/src/file/root_marker.cpp.s
+
+CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o: CMakeFiles/hoardor.dir/flags.make
+CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o: /root/hoardor/src/master/sync_worker.cpp
+CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building CXX object CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o -MF CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o.d -o CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o -c /root/hoardor/src/master/sync_worker.cpp
+
+CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /root/hoardor/src/master/sync_worker.cpp > CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.i
+
+CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /root/hoardor/src/master/sync_worker.cpp -o CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.s
+
+CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o: CMakeFiles/hoardor.dir/flags.make
+CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o: /root/hoardor/src/file/platform/file_info_posix.cpp
+CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Building CXX object CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o -MF CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o.d -o CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o -c /root/hoardor/src/file/platform/file_info_posix.cpp
+
+CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /root/hoardor/src/file/platform/file_info_posix.cpp > CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.i
+
+CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /root/hoardor/src/file/platform/file_info_posix.cpp -o CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.s
+
+CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o: CMakeFiles/hoardor.dir/flags.make
+CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o: /root/hoardor/src/file/platform/mount_points_linux.cpp
+CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o: CMakeFiles/hoardor.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o -MF CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o.d -o CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o -c /root/hoardor/src/file/platform/mount_points_linux.cpp
+
+CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /root/hoardor/src/file/platform/mount_points_linux.cpp > CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.i
+
+CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /root/hoardor/src/file/platform/mount_points_linux.cpp -o CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.s
+
 # Object files for target hoardor
 hoardor_OBJECTS = \
+"CMakeFiles/hoardor.dir/src/db/database.cpp.o" \
 "CMakeFiles/hoardor.dir/src/file/settings.cpp.o" \
 "CMakeFiles/hoardor.dir/src/file/text.cpp.o" \
-"CMakeFiles/hoardor.dir/src/file/scanner.cpp.o"
+"CMakeFiles/hoardor.dir/src/file/scanner.cpp.o" \
+"CMakeFiles/hoardor.dir/src/file/library.cpp.o" \
+"CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o" \
+"CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o" \
+"CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o" \
+"CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o" \
+"CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o"
 
 # External object files for target hoardor
 hoardor_EXTERNAL_OBJECTS =
 
+libhoardor.a: CMakeFiles/hoardor.dir/src/db/database.cpp.o
 libhoardor.a: CMakeFiles/hoardor.dir/src/file/settings.cpp.o
 libhoardor.a: CMakeFiles/hoardor.dir/src/file/text.cpp.o
 libhoardor.a: CMakeFiles/hoardor.dir/src/file/scanner.cpp.o
+libhoardor.a: CMakeFiles/hoardor.dir/src/file/library.cpp.o
+libhoardor.a: CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o
+libhoardor.a: CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o
+libhoardor.a: CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o
+libhoardor.a: CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o
+libhoardor.a: CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o
 libhoardor.a: CMakeFiles/hoardor.dir/build.make
 libhoardor.a: CMakeFiles/hoardor.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX static library libhoardor.a"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/root/hoardor/build-release/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Linking CXX static library libhoardor.a"
 	$(CMAKE_COMMAND) -P CMakeFiles/hoardor.dir/cmake_clean_target.cmake
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/hoardor.dir/link.txt --verbose=$(VERBOSE)
 

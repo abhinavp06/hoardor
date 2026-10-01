@@ -4,7 +4,7 @@
 # compile CXX with /usr/bin/c++
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/root/hoardor/include -I/root/hoardor/src
+CXX_INCLUDES = -I/root/hoardor/include -I/root/hoardor/src -I/root/hoardor/build-release/_deps/sqlite3-src
 
 CXX_FLAGS = -O3 -DNDEBUG -std=c++23 -Wall -Wextra -Wpedantic
 

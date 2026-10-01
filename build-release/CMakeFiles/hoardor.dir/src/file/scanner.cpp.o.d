@@ -205,14 +205,5 @@ CMakeFiles/hoardor.dir/src/file/scanner.cpp.o: \
  /usr/include/c++/13/bits/vector.tcc /usr/include/c++/13/expected \
  /usr/include/c++/13/unordered_set \
  /usr/include/c++/13/bits/unordered_set.h \
- /root/hoardor/src/file/file_time.hpp /usr/include/c++/13/chrono \
- /usr/include/c++/13/bits/stl_algo.h \
- /usr/include/c++/13/bits/algorithmfwd.h \
- /usr/include/c++/13/bits/stl_heap.h \
- /usr/include/c++/13/bits/uniform_int_dist.h \
- /usr/include/c++/13/bits/stl_tempbuf.h \
- /usr/include/c++/13/bits/chrono_io.h /usr/include/c++/13/format \
- /usr/include/c++/13/array /usr/include/c++/13/charconv \
- /usr/include/c++/13/span /usr/include/c++/13/variant \
- /usr/include/c++/13/bits/ranges_algobase.h \
+ /root/hoardor/src/file/platform/file_info.hpp \
  /root/hoardor/src/file/text.hpp

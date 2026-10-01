@@ -130,6 +130,19 @@ hoardor/fast:
 .PHONY : hoardor/fast
 
 #=============================================================================
+# Target rules for targets named hoardor_sqlite3
+
+# Build rule for target.
+hoardor_sqlite3: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 hoardor_sqlite3
+.PHONY : hoardor_sqlite3
+
+# fast build rule for target.
+hoardor_sqlite3/fast:
+	$(MAKE) $(MAKESILENT) -f third_party/CMakeFiles/hoardor_sqlite3.dir/build.make third_party/CMakeFiles/hoardor_sqlite3.dir/build
+.PHONY : hoardor_sqlite3/fast
+
+#=============================================================================
 # Target rules for targets named hoardor_benchmarks
 
 # Build rule for target.
@@ -167,6 +180,150 @@ benchmark_main: cmake_check_build_system
 benchmark_main/fast:
 	$(MAKE) $(MAKESILENT) -f _deps/googlebenchmark-build/src/CMakeFiles/benchmark_main.dir/build.make _deps/googlebenchmark-build/src/CMakeFiles/benchmark_main.dir/build
 .PHONY : benchmark_main/fast
+
+src/db/database.o: src/db/database.cpp.o
+.PHONY : src/db/database.o
+
+# target to build an object file
+src/db/database.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/db/database.cpp.o
+.PHONY : src/db/database.cpp.o
+
+src/db/database.i: src/db/database.cpp.i
+.PHONY : src/db/database.i
+
+# target to preprocess a source file
+src/db/database.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/db/database.cpp.i
+.PHONY : src/db/database.cpp.i
+
+src/db/database.s: src/db/database.cpp.s
+.PHONY : src/db/database.s
+
+# target to generate assembly for a file
+src/db/database.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/db/database.cpp.s
+.PHONY : src/db/database.cpp.s
+
+src/file/library.o: src/file/library.cpp.o
+.PHONY : src/file/library.o
+
+# target to build an object file
+src/file/library.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/library.cpp.o
+.PHONY : src/file/library.cpp.o
+
+src/file/library.i: src/file/library.cpp.i
+.PHONY : src/file/library.i
+
+# target to preprocess a source file
+src/file/library.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/library.cpp.i
+.PHONY : src/file/library.cpp.i
+
+src/file/library.s: src/file/library.cpp.s
+.PHONY : src/file/library.s
+
+# target to generate assembly for a file
+src/file/library.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/library.cpp.s
+.PHONY : src/file/library.cpp.s
+
+src/file/library_sync.o: src/file/library_sync.cpp.o
+.PHONY : src/file/library_sync.o
+
+# target to build an object file
+src/file/library_sync.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o
+.PHONY : src/file/library_sync.cpp.o
+
+src/file/library_sync.i: src/file/library_sync.cpp.i
+.PHONY : src/file/library_sync.i
+
+# target to preprocess a source file
+src/file/library_sync.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/library_sync.cpp.i
+.PHONY : src/file/library_sync.cpp.i
+
+src/file/library_sync.s: src/file/library_sync.cpp.s
+.PHONY : src/file/library_sync.s
+
+# target to generate assembly for a file
+src/file/library_sync.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/library_sync.cpp.s
+.PHONY : src/file/library_sync.cpp.s
+
+src/file/platform/file_info_posix.o: src/file/platform/file_info_posix.cpp.o
+.PHONY : src/file/platform/file_info_posix.o
+
+# target to build an object file
+src/file/platform/file_info_posix.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o
+.PHONY : src/file/platform/file_info_posix.cpp.o
+
+src/file/platform/file_info_posix.i: src/file/platform/file_info_posix.cpp.i
+.PHONY : src/file/platform/file_info_posix.i
+
+# target to preprocess a source file
+src/file/platform/file_info_posix.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.i
+.PHONY : src/file/platform/file_info_posix.cpp.i
+
+src/file/platform/file_info_posix.s: src/file/platform/file_info_posix.cpp.s
+.PHONY : src/file/platform/file_info_posix.s
+
+# target to generate assembly for a file
+src/file/platform/file_info_posix.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.s
+.PHONY : src/file/platform/file_info_posix.cpp.s
+
+src/file/platform/mount_points_linux.o: src/file/platform/mount_points_linux.cpp.o
+.PHONY : src/file/platform/mount_points_linux.o
+
+# target to build an object file
+src/file/platform/mount_points_linux.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o
+.PHONY : src/file/platform/mount_points_linux.cpp.o
+
+src/file/platform/mount_points_linux.i: src/file/platform/mount_points_linux.cpp.i
+.PHONY : src/file/platform/mount_points_linux.i
+
+# target to preprocess a source file
+src/file/platform/mount_points_linux.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.i
+.PHONY : src/file/platform/mount_points_linux.cpp.i
+
+src/file/platform/mount_points_linux.s: src/file/platform/mount_points_linux.cpp.s
+.PHONY : src/file/platform/mount_points_linux.s
+
+# target to generate assembly for a file
+src/file/platform/mount_points_linux.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.s
+.PHONY : src/file/platform/mount_points_linux.cpp.s
+
+src/file/root_marker.o: src/file/root_marker.cpp.o
+.PHONY : src/file/root_marker.o
+
+# target to build an object file
+src/file/root_marker.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o
+.PHONY : src/file/root_marker.cpp.o
+
+src/file/root_marker.i: src/file/root_marker.cpp.i
+.PHONY : src/file/root_marker.i
+
+# target to preprocess a source file
+src/file/root_marker.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/root_marker.cpp.i
+.PHONY : src/file/root_marker.cpp.i
+
+src/file/root_marker.s: src/file/root_marker.cpp.s
+.PHONY : src/file/root_marker.s
+
+# target to generate assembly for a file
+src/file/root_marker.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/root_marker.cpp.s
+.PHONY : src/file/root_marker.cpp.s
 
 src/file/scanner.o: src/file/scanner.cpp.o
 .PHONY : src/file/scanner.o
@@ -240,6 +397,30 @@ src/file/text.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/file/text.cpp.s
 .PHONY : src/file/text.cpp.s
 
+src/master/sync_worker.o: src/master/sync_worker.cpp.o
+.PHONY : src/master/sync_worker.o
+
+# target to build an object file
+src/master/sync_worker.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o
+.PHONY : src/master/sync_worker.cpp.o
+
+src/master/sync_worker.i: src/master/sync_worker.cpp.i
+.PHONY : src/master/sync_worker.i
+
+# target to preprocess a source file
+src/master/sync_worker.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.i
+.PHONY : src/master/sync_worker.cpp.i
+
+src/master/sync_worker.s: src/master/sync_worker.cpp.s
+.PHONY : src/master/sync_worker.s
+
+# target to generate assembly for a file
+src/master/sync_worker.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/hoardor.dir/build.make CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.s
+.PHONY : src/master/sync_worker.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -252,6 +433,25 @@ help:
 	@echo "... benchmark_main"
 	@echo "... hoardor"
 	@echo "... hoardor_benchmarks"
+	@echo "... hoardor_sqlite3"
+	@echo "... src/db/database.o"
+	@echo "... src/db/database.i"
+	@echo "... src/db/database.s"
+	@echo "... src/file/library.o"
+	@echo "... src/file/library.i"
+	@echo "... src/file/library.s"
+	@echo "... src/file/library_sync.o"
+	@echo "... src/file/library_sync.i"
+	@echo "... src/file/library_sync.s"
+	@echo "... src/file/platform/file_info_posix.o"
+	@echo "... src/file/platform/file_info_posix.i"
+	@echo "... src/file/platform/file_info_posix.s"
+	@echo "... src/file/platform/mount_points_linux.o"
+	@echo "... src/file/platform/mount_points_linux.i"
+	@echo "... src/file/platform/mount_points_linux.s"
+	@echo "... src/file/root_marker.o"
+	@echo "... src/file/root_marker.i"
+	@echo "... src/file/root_marker.s"
 	@echo "... src/file/scanner.o"
 	@echo "... src/file/scanner.i"
 	@echo "... src/file/scanner.s"
@@ -261,6 +461,9 @@ help:
 	@echo "... src/file/text.o"
 	@echo "... src/file/text.i"
 	@echo "... src/file/text.s"
+	@echo "... src/master/sync_worker.o"
+	@echo "... src/master/sync_worker.i"
+	@echo "... src/master/sync_worker.s"
 .PHONY : help
 
 
