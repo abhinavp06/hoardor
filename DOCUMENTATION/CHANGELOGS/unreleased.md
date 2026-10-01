@@ -2,6 +2,43 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### 500k-file benchmark, code tree, and untracked build output (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:**
+- **Benchmarks:** the library size is now configurable, and they were run at 500k files. Time scales linearly and memory stays flat.
+- **Code tree:** added `DOCUMENTATION/application/CODE_TREE.md`, one tree of the whole repository, and made keeping it current part of the workflow.
+- **Cleanup:** stopped tracking `build-release/`, which was committed by mistake.
+
+**Added**
+- `benchmarks/support/bench_tree.hpp`:
+  - `hoardor::bench::file_count()`, from the `HOARDOR_BENCH_FILES` environment variable (default 50,000)
+  - `library_tree()`, one generated tree shared by every benchmark
+- `DOCUMENTATION/application/CODE_TREE.md`:
+  - every file, namespace, type, member and free function (public, private, and internal), test, and build target, with a one-line purpose
+  - a Sync call-flow diagram
+
+**Changed**
+- **Benchmarks:** `scanner_benchmark.cpp` and `sync_benchmark.cpp` use the shared tree. They're renamed `BM_Scan`, `BM_FirstSync`, and `BM_IncrementalSync`, since the size is no longer fixed. `BM_FirstSync` now runs 2 iterations instead of 3, to keep 500k runs reasonable.
+- **`CLAUDE.md`:** `CODE_TREE.md` is now step 5 of the session reading order, part of the layout, a Definition-of-done item, and a living-documentation rule.
+- **Results:** `features/file_sync.md` §4.9 has a 50k vs 500k table, and `ARCHITECTURE.md` §7 has the 500k results.
+
+**Fixed**
+- `build-release/` (353 files) had been committed in `4ceea17` and updated in `df7a156`. `git add -A` picked it up before `.gitignore` covered `build*/`. It's untracked now and ignored, but it remains in those two commits. Rewriting the pushed history would need a force-push; that's up to the user (a squash merge of the PR would also keep it out of `master`).
+
+**Performance** (Release build, warm cache, this VM, runs back to back)
+
+| | 50k | 500k |
+|---|---|---|
+| Scan | 385 ms | 4.09 s |
+| First sync | 1.05 s | 8.67 s |
+| Incremental sync | 683 ms | 7.26 s |
+| Peak memory (benchmark process) | 8,456 KB | 8,576 KB |
+
+**Known limitations / follow-ups**
+- Generating the 500k tree takes about a minute of the 85 s run.
+- The incremental sync at 500k (7.3 s warm) is fine in the background. If libraries that size become real, per-volume parallel scans (phase 4) and skipping unchanged directories are the next levers.
+- Stage files explicitly instead of `git add -A` while build folders are around.
+
 ### File Sync v1, phase 2: SQLite, library roots, background Sync (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** Implemented phase 2 of File Sync (`features/file_sync.md` §4), completing **file scanner v1**:

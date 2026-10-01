@@ -520,6 +520,19 @@ CREATE TABLE file_scan_errors (
 | Incremental sync, 50k unchanged | **727 ms** | Target < 1 s. Was 888 ms before the single-statement fast path and the one-`stat` change |
 | Peak memory, sync of 5k vs 50k files (`hoardor_sync`, Debug build) | **6.4 MB vs 7.7 MB** | The difference is SQLite's page cache filling up to its fixed 2 MB limit. Flat |
 
+**Scaling to 500k files** (2026-10-01, `HOARDOR_BENCH_FILES=500000`, same machine and build, run back to back with 50k):
+
+| Benchmark | 50k files | 500k files | Per file at 500k |
+|---|---|---|---|
+| Scan | 385 ms | 4.09 s | ≈ 8 µs |
+| First sync (all inserts) | 1.05 s | 8.67 s | ≈ 17 µs |
+| Incremental sync (nothing changed) | 683 ms | 7.26 s | ≈ 15 µs |
+| Peak memory of the benchmark process | 8,456 KB | 8,576 KB | flat (+120 KB for 10× the files) |
+
+- **Time is linear** in the number of files, and memory doesn't grow with them.
+- **A 500k-file library** takes about 7 s to sync incrementally with a warm cache. On a cold HDD expect more, bounded by seeks. That's why Sync runs in the background (§4.10).
+- The 50k numbers vary by about ±15% between runs on this VM (scan: 317–409 ms).
+
 - **Profile** (`perf`, incremental sync): about 70% of the time is in the kernel (`stat` path walks), about 16% in hoardor, and SQLite's VM about 3%.
 - **Cache size:** a larger SQLite page cache (8 or 16 MB) made no measurable difference, so the default is kept.
 

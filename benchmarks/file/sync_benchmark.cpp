@@ -1,26 +1,12 @@
 #include <hoardor/file/library.hpp>
 
-#include "support/temp_dir.hpp"
+#include "support/bench_tree.hpp"
 
 #include <benchmark/benchmark.h>
 
 namespace {
 
 namespace fs = std::filesystem;
-
-// 50k empty files in 500 folders of 100, shared by both benchmarks.
-const hoardor::test::TempDir& tree() {
-    static const hoardor::test::TempDir dir;
-    static const bool built = [] {
-        for (int folder = 0; folder < 500; ++folder) {
-            const auto album = fs::path("Music") / ("Artist " + std::to_string(folder / 10)) / ("Album " + std::to_string(folder));
-            for (int track = 0; track < 100; ++track) dir.write(album / ("Track " + std::to_string(track) + ".flac"));
-        }
-        return true;
-    }();
-    (void)built;
-    return dir;
-}
 
 // A database file with one root over the tree. Members are declared in the order they
 // must be built and destroyed: the Library points at the Database.
@@ -40,12 +26,12 @@ std::unique_ptr<Synced> fresh_library() {
     settings.settle_window_seconds = 0;
     (void)s->library->save_settings(settings);
     const auto music = s->library->categories()->front().id;
-    s->root = s->library->add_root(music, tree().path() / "Music")->id;
+    s->root = s->library->add_root(music, hoardor::bench::library_tree().path() / "Music")->id;
     return s;
 }
 
 // The first sync of a library: every file is an insert.
-void BM_FirstSyncFiftyThousandFiles(benchmark::State& state) {
+void BM_FirstSync(benchmark::State& state) {
     for (auto _ : state) {
         state.PauseTiming();
         auto lib = fresh_library();
@@ -59,10 +45,10 @@ void BM_FirstSyncFiftyThousandFiles(benchmark::State& state) {
         state.ResumeTiming();
     }
 }
-BENCHMARK(BM_FirstSyncFiftyThousandFiles)->Unit(benchmark::kMillisecond)->Iterations(3);
+BENCHMARK(BM_FirstSync)->Unit(benchmark::kMillisecond)->Iterations(2);
 
 // The everyday case: press Sync, nothing (or almost nothing) changed.
-void BM_IncrementalSyncFiftyThousandFiles(benchmark::State& state) {
+void BM_IncrementalSync(benchmark::State& state) {
     auto lib = fresh_library();
     lib->library->sync_root(lib->root);
     for (auto _ : state) {
@@ -72,6 +58,6 @@ void BM_IncrementalSyncFiftyThousandFiles(benchmark::State& state) {
         state.counters["unchanged"] = static_cast<double>(report.unchanged);
     }
 }
-BENCHMARK(BM_IncrementalSyncFiftyThousandFiles)->Unit(benchmark::kMillisecond)->MinTime(2.0);
+BENCHMARK(BM_IncrementalSync)->Unit(benchmark::kMillisecond)->MinTime(2.0);
 
 }
