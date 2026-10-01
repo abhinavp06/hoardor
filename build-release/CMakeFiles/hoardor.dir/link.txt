@@ -1,2 +1,0 @@
-/usr/bin/ar qc libhoardor.a CMakeFiles/hoardor.dir/src/db/database.cpp.o CMakeFiles/hoardor.dir/src/file/settings.cpp.o CMakeFiles/hoardor.dir/src/file/text.cpp.o CMakeFiles/hoardor.dir/src/file/scanner.cpp.o CMakeFiles/hoardor.dir/src/file/library.cpp.o CMakeFiles/hoardor.dir/src/file/library_sync.cpp.o CMakeFiles/hoardor.dir/src/file/root_marker.cpp.o CMakeFiles/hoardor.dir/src/master/sync_worker.cpp.o CMakeFiles/hoardor.dir/src/file/platform/file_info_posix.cpp.o CMakeFiles/hoardor.dir/src/file/platform/mount_points_linux.cpp.o
-/usr/bin/ranlib libhoardor.a

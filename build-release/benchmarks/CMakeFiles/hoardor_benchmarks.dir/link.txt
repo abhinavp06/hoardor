@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/hoardor_benchmarks.dir/file/scanner_benchmark.cpp.o CMakeFiles/hoardor_benchmarks.dir/file/sync_benchmark.cpp.o -o hoardor_benchmarks  ../libhoardor.a ../_deps/googlebenchmark-build/src/libbenchmark_main.a ../third_party/libhoardor_sqlite3.a ../_deps/googlebenchmark-build/src/libbenchmark.a -lrt 
