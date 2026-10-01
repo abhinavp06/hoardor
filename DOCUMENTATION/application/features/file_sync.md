@@ -402,6 +402,7 @@ CREATE TABLE file_scan_errors (
 
 - **Table:** `file_settings` holds one row per field.
 - **Format:** integers are written in decimal, booleans as `true` or `false`, lists as newline-separated lines, and `extension_kinds` as `ext=kind` lines.
+- **Saving:** `save_settings` first runs `validate()`. Any problem (a number out of range, an empty extension, a line break or `=` that would corrupt the line-based storage) refuses the whole save with `InvalidArgument` and a plain-words message, and nothing is stored. The ranges live in one table, `file::limits`, used by both saving and loading. *(Added 2026-10-01 for TYLI's Settings screen.)*
 - **Loading:** start from `Settings::defaults()` and overlay every stored value that parses. A missing key, or a value that fails to parse, keeps the default. Unknown keys are ignored, so a newer database still opens in an older build.
 - **New fields in `file::Settings`:**
 

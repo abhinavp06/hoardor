@@ -2,6 +2,36 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Settings validation before saving (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:**
+- **Before:** `Library::save_settings` stored any values, and invalid ones were silently replaced by defaults the next time settings loaded.
+- **Now:** `file::validate(Settings)` reports problems in plain words, and `save_settings` refuses invalid settings with `InvalidArgument` and stores nothing.
+- **Why:** TYLI's Settings screen needs this so it can show the user why a value was rejected. The rules stay in hoardor instead of being copied into the UI.
+
+**Added**
+- `include/hoardor/file/settings.hpp`: `struct SettingRange`, `namespace limits` (one range per numeric setting), and `validate()`.
+
+**Changed**
+- `src/file/settings.cpp`: `validate()`. It checks every numeric range, empty extensions, `=` or line breaks in extensions (which would corrupt the `ext=kind` lines), unknown kinds, and empty or multi-line ignore entries.
+- `src/file/library.cpp`:
+  - loading uses `limits::` instead of literal numbers, so saving and loading share one table
+  - `save_settings` validates first
+  - `parse_int` takes `int64` limits
+
+**Design decisions and trade-offs**
+- **Validation lives in hoardor, the source of truth.** TYLI only shows hoardor's message. Rejected: copying the ranges into QML, where they would drift.
+- **All or nothing:** one invalid field refuses the whole save, so a half-applied settings change can't happen.
+
+**Files**
+- `include/hoardor/file/settings.hpp`, `src/file/settings.cpp`, `src/file/library.cpp`, `tests/file/settings_test.cpp`, `tests/file/library_test.cpp`, `DOCUMENTATION/application/features/file_sync.md` (§4.4), `DOCUMENTATION/application/CODE_TREE.md` and `.html`.
+
+**Tests** (113 in total, 4 new)
+- `Validate.DefaultsAreValid`
+- `Validate.FlagsOutOfRangeNumbers`
+- `Validate.FlagsValuesThatWouldCorruptStorage`
+- `LibraryTest.InvalidSettingsAreRefusedAndNothingIsStored`
+
 ### hoardor as a subproject of TYLI (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** TYLI consumes hoardor with `add_subdirectory(../hoardor)` (the user's decision, for side-by-side development). hoardor's test, playground, and run-tests options now default to ON only when hoardor is the top-level project, so a TYLI build compiles only the library and SQLite.

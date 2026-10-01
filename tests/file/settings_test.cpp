@@ -83,3 +83,26 @@ TEST(FileKindNames, RoundTrip) {
     EXPECT_EQ(hoardor::file::file_kind_from_string("AUDIO"), FileKind::Audio);
     EXPECT_EQ(hoardor::file::file_kind_from_string("podcast"), std::nullopt);
 }
+
+TEST(Validate, DefaultsAreValid) {
+    EXPECT_TRUE(hoardor::file::validate(Settings::defaults()).empty());
+}
+
+TEST(Validate, FlagsOutOfRangeNumbers) {
+    Settings s = Settings::defaults();
+    s.mass_removal_threshold_percent = 150;
+    s.batch_max_rows = 0;
+    s.settle_window_seconds = -1;
+    const auto problems = hoardor::file::validate(s);
+    ASSERT_EQ(problems.size(), 3u);
+    EXPECT_NE(problems[0].find("between 0 and 86400"), std::string::npos) << problems[0];
+}
+
+TEST(Validate, FlagsValuesThatWouldCorruptStorage) {
+    Settings s = Settings::defaults();
+    s.extension_kinds["a=b"] = FileKind::Audio;
+    s.extension_kinds["  "] = FileKind::Audio;
+    s.ignored_names.push_back("two\nlines");
+    s.ignored_prefixes.push_back("");
+    EXPECT_EQ(hoardor::file::validate(s).size(), 4u);
+}

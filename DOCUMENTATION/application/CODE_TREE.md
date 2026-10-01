@@ -63,6 +63,9 @@ hoardor/
 │   │   │   │   ├── batch_max_rows (2000) · batch_max_milliseconds (50) · progress_interval_files (500)
 │   │   │   │   ├── relocation_sample_size (20) · relocation_min_match_percent (80)
 │   │   │   │   └── static defaults()           the default values above
+│   │   │   ├── struct SettingRange             { min, max } for a numeric setting
+│   │   │   ├── ns limits                       one SettingRange per numeric setting (used to validate and when loading)
+│   │   │   ├── fn validate(Settings)           problems in plain words (empty = valid); save_settings refuses invalid settings
 │   │   │   └── fn kind_of(path, Settings)      a file's kind by extension, or nullopt (one-off checks)
 │   │   │
 │   │   ├── scanner.hpp
@@ -190,7 +193,7 @@ hoardor/
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 109 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 113 tests, run by ctest)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target
 │   ├── support/
 │   │   ├── temp_dir.hpp                        ns hoardor::test: class TempDir (unique temp folder; .path(), .write(relative, size)); fn u8path(utf8)
@@ -204,11 +207,12 @@ hoardor/
 │   │       ├── Migrate.*                       AppliesEachVersionOncePerComponent, FailedMigrationRollsBackAndKeepsVersion
 │   │       └── Wal.*                           ReaderSeesCommittedDataWhileAnotherConnectionWrites
 │   ├── file/
-│   │   ├── settings_test.cpp                   10 TESTs
+│   │   ├── settings_test.cpp                   13 TESTs
 │   │   │   ├── SettingsDefaults.*              CoverEveryKind, IgnoreListsHoldExternalDriveLitter
 │   │   │   ├── KindOf.*                        IgnoresExtensionCase, AcceptsUserKeysWithDotOrUppercase, RespectsEditedMap,
 │   │   │   │                                   NoExtensionIsNotMedia, DotOnlyNameIsNotMedia, MultipleDotsUseTheLastExtension, EmptySettingsMeanNothingIsMedia
-│   │   │   └── FileKindNames.RoundTrip
+│   │   │   ├── FileKindNames.RoundTrip
+│   │   │   └── Validate.*                      DefaultsAreValid, FlagsOutOfRangeNumbers, FlagsValuesThatWouldCorruptStorage
 │   │   ├── text_test.cpp                       6 TESTs: NormalizeExtension.StripsDotSpacesAndCase, AsciiLower.LeavesUtf8Untouched,
 │   │   │                                       Utf8FromBytes.{AcceptsValidUtf8, RepairsInvalidSequences},
 │   │   │                                       Utf8FromUtf16.ConvertsPairsAndRepairsLoneSurrogates, ToUtf8.UsesForwardSlashes
@@ -222,9 +226,10 @@ hoardor/
 │   │   │                                       UnreadableSubdirectoryIsReportedAndScanContinues, RootRemovedMidScanReportsRootLostOnceAndLast,
 │   │   │                                       FilesVanishingMidScanAreSilentlySkipped, DestroyedMidScanIsSafe, ProgressCountersMatchTheTree,
 │   │   │                                       NamesDifferingOnlyInCaseAreBothEmitted, FifoIsNotEmitted (POSIX), InvalidUtf8NamesAreReportedNotEmitted (POSIX)
-│   │   ├── library_test.cpp                    21 TESTs
+│   │   ├── library_test.cpp                    22 TESTs
 │   │   │   ├── LibraryTest.* (settings)        SeedsDefaultCategories, OpeningAgainKeepsData, SettingsDefaultWhenNothingStored,
-│   │   │   │                                   SettingsRoundTripEveryField, CorruptSettingValuesFallBackToDefaults, UnknownSettingKeysAreIgnored
+│   │   │   │                                   SettingsRoundTripEveryField, CorruptSettingValuesFallBackToDefaults, UnknownSettingKeysAreIgnored,
+│   │   │   │                                   InvalidSettingsAreRefusedAndNothingIsStored
 │   │   │   ├── LibraryTest.* (categories)      AddUpdateRemoveCategory, CategoryNamesAreUniqueIgnoringCaseAndNotEmpty, CategoryWithFoldersCannotBeRemoved
 │   │   │   ├── LibraryTest.* (roots)           AddRootWritesMarkerAndRecordsTheFolder, AddRootAsWholeVolumeHasEmptyPathInVolume, AddRootRejectsBadInput,
 │   │   │   │                                   RootsOnDifferentDrivesAndCategoriesAreIndependent, OverlappingRootsAreRejected,

@@ -62,6 +62,27 @@ struct Settings {
     static Settings defaults();
 };
 
+// The allowed range of each numeric setting. One table, used to validate before saving
+// and to decide whether a stored value is usable when loading.
+struct SettingRange {
+    std::int64_t min;
+    std::int64_t max;
+};
+
+namespace limits {
+inline constexpr SettingRange settle_window_seconds{0, 86'400};
+inline constexpr SettingRange mass_removal_threshold_percent{0, 100};
+inline constexpr SettingRange batch_max_rows{1, 1'000'000};
+inline constexpr SettingRange batch_max_milliseconds{1, 60'000};
+inline constexpr SettingRange progress_interval_files{1, 1'000'000};
+inline constexpr SettingRange relocation_sample_size{0, 10'000};
+inline constexpr SettingRange relocation_min_match_percent{0, 100};
+}
+
+// Problems with these settings, in plain words (empty when they're valid).
+// Library::save_settings refuses settings that have any.
+std::vector<std::string> validate(const Settings& settings);
+
 // The kind of a file, by its extension, or std::nullopt when it isn't media.
 // Convenient for one-off checks. The scanner uses its own prepared lookup.
 std::optional<FileKind> kind_of(const std::filesystem::path& file, const Settings& settings);

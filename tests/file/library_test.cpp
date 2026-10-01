@@ -245,3 +245,14 @@ TEST(RootMarker, RejectsMalformedFiles) {
     EXPECT_EQ(uuid[14], '4') << "version 4";
     EXPECT_NE(uuid, hoardor::file::detail::new_uuid());
 }
+
+TEST_F(LibraryTest, InvalidSettingsAreRefusedAndNothingIsStored) {
+    Settings s = Settings::defaults();
+    s.mass_removal_threshold_percent = 150;
+    s.sync_on_startup = true;
+    const auto saved = library->save_settings(s);
+    ASSERT_FALSE(saved.has_value());
+    EXPECT_EQ(saved.error().code, ErrorCode::InvalidArgument);
+    EXPECT_NE(saved.error().message.find("mass-removal threshold"), std::string::npos) << saved.error().message;
+    EXPECT_FALSE(library->load_settings()->sync_on_startup) << "all or nothing";
+}

@@ -157,7 +157,7 @@ std::vector<std::string> split_lines(std::string_view text) {
 }
 
 template <class Int>
-bool parse_int(std::string_view text, Int& out, Int min, Int max) {
+bool parse_int(std::string_view text, Int& out, std::int64_t min, std::int64_t max) {
     Int value{};
     const auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), value);
     if (ec != std::errc{} || ptr != text.data() + text.size() || value < min || value > max) return false;
@@ -208,19 +208,25 @@ void apply(Settings& s, const std::string& key, const std::string& value) {
         if (value == "true") s.sync_on_startup = true;
         else if (value == "false") s.sync_on_startup = false;
     } else if (key == "settle_window_seconds") {
-        parse_int<std::int64_t>(value, s.settle_window_seconds, 0, 86'400);
+        parse_int<std::int64_t>(value, s.settle_window_seconds, limits::settle_window_seconds.min,
+                                limits::settle_window_seconds.max);
     } else if (key == "mass_removal_threshold_percent") {
-        parse_int(value, s.mass_removal_threshold_percent, 0, 100);
+        parse_int<int>(value, s.mass_removal_threshold_percent, limits::mass_removal_threshold_percent.min,
+                       limits::mass_removal_threshold_percent.max);
     } else if (key == "batch_max_rows") {
-        parse_int(value, s.batch_max_rows, 1, 1'000'000);
+        parse_int<int>(value, s.batch_max_rows, limits::batch_max_rows.min, limits::batch_max_rows.max);
     } else if (key == "batch_max_milliseconds") {
-        parse_int(value, s.batch_max_milliseconds, 1, 60'000);
+        parse_int<int>(value, s.batch_max_milliseconds, limits::batch_max_milliseconds.min,
+                       limits::batch_max_milliseconds.max);
     } else if (key == "progress_interval_files") {
-        parse_int(value, s.progress_interval_files, 1, 1'000'000);
+        parse_int<int>(value, s.progress_interval_files, limits::progress_interval_files.min,
+                       limits::progress_interval_files.max);
     } else if (key == "relocation_sample_size") {
-        parse_int(value, s.relocation_sample_size, 0, 10'000);
+        parse_int<int>(value, s.relocation_sample_size, limits::relocation_sample_size.min,
+                       limits::relocation_sample_size.max);
     } else if (key == "relocation_min_match_percent") {
-        parse_int(value, s.relocation_min_match_percent, 0, 100);
+        parse_int<int>(value, s.relocation_min_match_percent, limits::relocation_min_match_percent.min,
+                       limits::relocation_min_match_percent.max);
     }
     // Unknown keys (e.g. written by a newer build) are ignored.
 }
@@ -330,6 +336,11 @@ Result<Settings> Library::load_settings() {
 }
 
 Result<void> Library::save_settings(const Settings& settings) {
+    if (const auto problems = validate(settings); !problems.empty()) {
+        std::string message;
+        for (const auto& p : problems) message += (message.empty() ? "" : "; ") + p;
+        return std::unexpected(Error{ErrorCode::InvalidArgument, message});
+    }
     auto tx = db::Transaction::begin(*db_);
     if (!tx) return std::unexpected(database_error(tx.error()));
     auto st = db_->prepare("INSERT INTO file_settings (key, value) VALUES (?, ?) "
