@@ -33,3 +33,4 @@ Not in scope:
   - `Library`: `open`, `pending`, `pending_count`, `store(…, poster_entry)`, `store_error`, `remove_unused_names`, `items`, `groups`, `count`, `group_count`, `item`
 - **Internal:** `src/video/sources.hpp` (`.nfo` parsing with pugixml; name parsing), tested directly.
 - **Tables:** `video_items`, `video_names`, `video_item_names` (video migration 1).
+- **Search** (since 2026-10-02): `Field::Search`, full-text over the `video_search` FTS5 table (migration 2).

@@ -3,6 +3,7 @@
 #include "core/text.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 
 namespace hoardor::media {
@@ -93,6 +94,19 @@ std::expected<FilterSql, std::string> filter_sql(const Schema& schema, std::span
     for (const Condition& c : filter) {
         auto field = field_of(schema, c.field);
         if (!field) return std::unexpected(field.error());
+        if (!(*field)->search_table.empty()) {
+            const std::string text = std::holds_alternative<std::string>(c.value) ? std::get<std::string>(c.value)
+                                                                                    : std::to_string(std::get<std::int64_t>(c.value));
+            const std::string query = search_query(text);
+            if (query.empty()) {
+                out.where += " AND 0";  // nothing to look for: nothing matches
+                continue;
+            }
+            out.where += " AND " + schema.id + " IN (SELECT rowid FROM " + (*field)->search_table + " WHERE " +
+                         (*field)->search_table + " MATCH ?)";
+            where_binds.emplace_back(query);
+            continue;
+        }
         auto value = key_value(**field, c.value);
         if (!value) return std::unexpected(value.error());
         if ((*field)->names_kind > 0) {
@@ -297,6 +311,23 @@ core::Cursor cursor_from(const db::Statement& statement, const Built& built, std
         else values.emplace_back(statement.column_int64(column));
     }
     return core::Cursor{encode(values), id};
+}
+
+std::string search_query(std::string_view text) {
+    std::string out, word;
+    const auto flush = [&] {
+        if (word.empty()) return;
+        out += (out.empty() ? "\"" : " \"") + word + "\"*";
+        word.clear();
+    };
+    for (char c : text) {
+        // Word characters: letters, digits, and every byte of a UTF-8 sequence (non-ASCII letters).
+        const auto u = static_cast<unsigned char>(c);
+        if (std::isalnum(u) || u >= 0x80) word.push_back(c);
+        else flush();
+    }
+    flush();
+    return out;
 }
 
 }

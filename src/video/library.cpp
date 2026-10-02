@@ -53,7 +53,25 @@ CREATE TABLE video_item_names (
 CREATE INDEX video_item_names_name ON video_item_names (name_id, role, entry_id);
 )sql";
 
-constexpr std::array<db::Migration, 1> migrations{{{1, schema_v1}}};
+// Full-text search, as in the audio engine.
+constexpr std::string_view schema_v2 = R"sql(
+CREATE VIRTUAL TABLE video_search USING fts5(title, show, genres, directors, tokenize = 'unicode61 remove_diacritics 2');
+INSERT INTO video_search (rowid, title, show, genres, directors)
+    SELECT entry_id, title, show, genre, director FROM video_items WHERE read_error = '';
+CREATE TRIGGER video_search_insert AFTER INSERT ON video_items WHEN new.read_error = '' BEGIN
+    INSERT INTO video_search (rowid, title, show, genres, directors) VALUES (new.entry_id, new.title, new.show, new.genre, new.director);
+END;
+CREATE TRIGGER video_search_update AFTER UPDATE ON video_items BEGIN
+    DELETE FROM video_search WHERE rowid = old.entry_id;
+    INSERT INTO video_search (rowid, title, show, genres, directors)
+        SELECT new.entry_id, new.title, new.show, new.genre, new.director WHERE new.read_error = '';
+END;
+CREATE TRIGGER video_search_delete AFTER DELETE ON video_items BEGIN
+    DELETE FROM video_search WHERE rowid = old.entry_id;
+END;
+)sql";
+
+constexpr std::array<db::Migration, 2> migrations{{{1, schema_v1}, {2, schema_v2}}};
 
 constexpr int genre_kind = 1, person_kind = 2;
 constexpr int genre_role = 1, director_role = 2, writer_role = 3;
@@ -132,6 +150,7 @@ const media::Schema& schema() {
         m.fields[int(Field::Category)] = media::FieldSql{.value = "r.category_id", .key = "r.category_id", .broad = true};
         m.fields[int(Field::Root)] = media::FieldSql{.value = "e.root_id", .key = "e.root_id", .broad = true};
         m.fields[int(Field::Entry)] = number("t.entry_id");
+        m.fields[int(Field::Search)] = media::FieldSql{.value = "", .key = "", .text = true, .search_table = "video_search"};
         m.group_indexes[{int(Field::Title), int(Field::Year)}] = "video_items_title";
         m.group_indexes[{int(Field::Show)}] = "video_items_show";
         m.group_indexes[{int(Field::Show), int(Field::Season)}] = "video_items_show";

@@ -2,6 +2,40 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Full-text search (audio and video) (2026-10-02, branch `abhinavp06/MEDIA_LISTING`)
+
+**Summary:** The user asked for a search bar. hoardor gets a generic `Field::Search` filter in both engines, in keeping with the generic-API rule:
+- **Matching:** every typed word must match, as a prefix, ignoring case and accents.
+- **Audio** searches title, album, album artist, artists, and genres.
+- **Video** searches title, show, genres, and directors.
+- **Combining:** it works with every other filter, order, and grouping (e.g. albums matching "radio").
+
+**Added**
+- **SQLite with `SQLITE_ENABLE_FTS5`** (`third_party/CMakeLists.txt`): the full-text module built into the same amalgamation, with no new dependency.
+- **audio migration 2:** an `audio_search` FTS5 table (`unicode61 remove_diacritics 2`, rowid = entry_id), backfilled from `audio_tracks`, and three triggers keeping it current on insert, update, and delete (cascades from `file_entries` fire them too). Unreadable rows aren't indexed.
+- **video migration 2:** `video_search`, the same way.
+- **`media::search_query(text)`:** user words become `"word"*` terms. Quotes, operators, and punctuation in the input are only separators, so no FTS syntax leaks through. No words means nothing matches.
+- **`FieldSql::search_table`:** the filter becomes `id IN (SELECT rowid FROM <table> WHERE <table> MATCH ?)`.
+
+**Decision**
+- **FTS5 over `LIKE '%…%'`:** an index instead of a full scan, word prefixes, and accent folding.
+- **Triggers rather than code in `store()`:** they also cover deletes by cascade.
+
+**Tests:** 183 pass.
+- `AudioLibraryTest.SearchFindsWordPrefixesAcrossFieldsIgnoringAccents`:
+  - matches in album artist and album, all words required, title prefixes, genres
+  - diacritics ("bjork" finds Björk), case, punctuation (`ac/dc`), stray quotes, empty input
+  - unreadable rows excluded, groups of matching albums
+  - reindexing on retag, emptied on removal
+- `VideoLibraryTest.SearchTitlesShowsAndDirectors`
+
+**Files**
+- `third_party/CMakeLists.txt`
+- `src/media/query.{hpp,cpp}`
+- `include/hoardor/{audio/audio,video/video}.hpp`, `src/{audio,video}/library.cpp`
+- `tests/{audio,video}/library_test.cpp`
+- docs
+
 ### Sync and metadata reading run one worker per physical drive (2026-10-02, branch `abhinavp06/MEDIA_LISTING`)
 
 **Summary:** This is the per-drive parallelism the user asked for, and the start of file engine phase 4. Folders on different physical drives now sync and have their metadata read at the same time, one worker per drive, never two on one disk (ARCHITECTURE §6: two readers on a spinning disk thrash its head).

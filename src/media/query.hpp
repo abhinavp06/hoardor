@@ -29,6 +29,7 @@ struct FieldSql {
     int names_kind = 0;     // > 0: several values per item, in the link/names tables with this kind
     std::string link_extra{}; // extra condition on the link row, with {l} for its alias (e.g. "{l}.role = 2")
     bool broad = false;     // a filter on it keeps most rows (category, root): group index hints still apply
+    std::string search_table{};  // a full-text field: the filter value is words, matched in this FTS5 table (rowid = id)
 };
 
 struct Schema {
@@ -84,6 +85,11 @@ BuildResult count(const Schema& schema, std::span<const Condition> filter);
 BuildResult group_count(const Schema& schema, std::span<const int> by, std::span<const Condition> filter);
 
 void bind_all(db::Statement& statement, const std::vector<Value>& values);
+
+// Words typed by a user -> an FTS5 query: each word as a quoted prefix, all required
+// ("radio hea" -> "radio"* "hea"*). Quotes and operators in the input are just text.
+// Empty when there are no words.
+std::string search_query(std::string_view text);
 
 // The cursor for the row the statement is on (its keyset columns), and the id for items.
 core::Cursor cursor_from(const db::Statement& statement, const Built& built, std::int64_t id);

@@ -13,6 +13,7 @@ target_compile_definitions(hoardor_sqlite3 PRIVATE
     SQLITE_DQS=0
     SQLITE_DEFAULT_MEMSTATUS=0
     SQLITE_OMIT_LOAD_EXTENSION
+    SQLITE_ENABLE_FTS5  # full-text search over titles, albums, artists, … (features/media_listing.md §8c)
 )
 find_package(Threads REQUIRED)
 target_link_libraries(hoardor_sqlite3 PUBLIC Threads::Threads)

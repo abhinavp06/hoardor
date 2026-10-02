@@ -51,7 +51,29 @@ CREATE TABLE audio_track_names (
 CREATE INDEX audio_track_names_name ON audio_track_names (name_id, entry_id);
 )sql";
 
-constexpr std::array<db::Migration, 1> migrations{{{1, schema_v1}}};
+// Full-text search (features/media_listing.md §8c): one FTS5 row per readable track, rowid =
+// entry_id, kept current by triggers (foreign-key cascades fire them too). Diacritics are
+// folded, so "bjork" finds "Björk".
+constexpr std::string_view schema_v2 = R"sql(
+CREATE VIRTUAL TABLE audio_search USING fts5(title, album, album_artist, artists, genres,
+                                             tokenize = 'unicode61 remove_diacritics 2');
+INSERT INTO audio_search (rowid, title, album, album_artist, artists, genres)
+    SELECT entry_id, title, album, album_artist, artist, genre FROM audio_tracks WHERE read_error = '';
+CREATE TRIGGER audio_search_insert AFTER INSERT ON audio_tracks WHEN new.read_error = '' BEGIN
+    INSERT INTO audio_search (rowid, title, album, album_artist, artists, genres)
+        VALUES (new.entry_id, new.title, new.album, new.album_artist, new.artist, new.genre);
+END;
+CREATE TRIGGER audio_search_update AFTER UPDATE ON audio_tracks BEGIN
+    DELETE FROM audio_search WHERE rowid = old.entry_id;
+    INSERT INTO audio_search (rowid, title, album, album_artist, artists, genres)
+        SELECT new.entry_id, new.title, new.album, new.album_artist, new.artist, new.genre WHERE new.read_error = '';
+END;
+CREATE TRIGGER audio_search_delete AFTER DELETE ON audio_tracks BEGIN
+    DELETE FROM audio_search WHERE rowid = old.entry_id;
+END;
+)sql";
+
+constexpr std::array<db::Migration, 2> migrations{{{1, schema_v1}, {2, schema_v2}}};
 
 constexpr int artist_kind = 1;
 constexpr int genre_kind = 2;
@@ -104,6 +126,7 @@ const media::Schema& schema() {
         m.fields[int(Field::Category)] = media::FieldSql{.value = "r.category_id", .key = "r.category_id", .broad = true};
         m.fields[int(Field::Root)] = media::FieldSql{.value = "e.root_id", .key = "e.root_id", .broad = true};
         m.fields[int(Field::Entry)] = number("t.entry_id");
+        m.fields[int(Field::Search)] = media::FieldSql{.value = "", .key = "", .text = true, .search_table = "audio_search"};
         m.group_indexes[{int(Field::AlbumArtist), int(Field::Album)}] = "audio_tracks_album";
         m.group_indexes[{int(Field::AlbumArtist)}] = "audio_tracks_album";
         m.group_indexes[{int(Field::Album), int(Field::AlbumArtist)}] = "audio_tracks_album_title";

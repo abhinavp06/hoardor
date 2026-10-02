@@ -65,6 +65,7 @@ enum class Field : std::uint8_t {
     Title, Artist, AlbumArtist, Album, Genre, Year, Disc, Track,  // descriptive (Artist, Genre: many per track)
     Duration, Bitrate, SampleRate, BitDepth, Codec, Lossless,     // technical
     Added, Category, Root, Entry,                                 // from the file engine
+    Search,  // filter only: words matched (as prefixes, all required) in title, album, album artist, artists, genres
 };
 
 using Value = std::variant<std::int64_t, std::string>;

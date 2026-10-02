@@ -237,3 +237,23 @@ TEST_F(VideoLibraryTest, UnusedNamesAreRemoved) {
     ASSERT_TRUE(library->remove_root(root));
     EXPECT_EQ(videos->remove_unused_names().value(), 2u);
 }
+
+TEST_F(VideoLibraryTest, SearchTitlesShowsAndDirectors) {
+    put("a.mkv");
+    put("b.mkv");
+    sync();
+    auto a = movie("Amélie", 2001);
+    a.directors = {"Jean-Pierre Jeunet"};
+    store("a.mkv", a);
+    auto b = movie("Dark", 2017);
+    b.type = video::Type::Episode;
+    b.show = "Dark";
+    b.title = "Secrets";
+    store("b.mkv", b);
+    const auto found = [&](const std::string& text) { return videos->count({{{Field::Search, Value{text}}}}).value(); };
+    EXPECT_EQ(found("amelie"), 1u);
+    EXPECT_EQ(found("jeunet"), 1u);
+    EXPECT_EQ(found("dark"), 1u);
+    EXPECT_EQ(found("secr"), 1u);
+    EXPECT_EQ(found("nothing"), 0u);
+}

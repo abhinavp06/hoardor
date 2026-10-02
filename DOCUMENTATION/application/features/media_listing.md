@@ -346,6 +346,14 @@ How the code differs from §4–§7, and what was measured.
 - **Next:** parallel reading per drive (file engine phase 4).
 - **Measuring on the user's drives:** `hoardor_read <folder>` (playground).
 
+## 8c. Search (2026-10-02, asked for by the user)
+
+- **The field:** `audio::Field::Search` / `video::Field::Search` is a filter only.
+  - Every typed word is matched as a prefix and all are required, ignoring case and accents.
+  - It combines with any other filter, order, and grouping.
+- **The index:** FTS5 tables (`audio_search`, `video_search`) maintained by triggers (`DATABASE.md`).
+- **TYLI's search page** groups results as albums, artists, tracks, movies, and shows, by grouping on `Category` plus the usual fields.
+
 ## 9. Not in this feature
 
 - Text (books, blogs): a separate build.

@@ -80,6 +80,7 @@ enum class Field : std::uint8_t {
     Type, Title, Year, Genre, Director, Show, Season, Episode,  // descriptive (Genre, Director: many per item)
     Duration, Height, Hdr, VideoCodec,                          // technical
     Added, Category, Root, Entry,                               // from the file engine
+    Search,  // filter only: words matched (as prefixes, all required) in title, show, genres, directors
 };
 
 using Value = std::variant<std::int64_t, std::string>;

@@ -10,6 +10,7 @@ Status: `v0.1.0` (file migration 1), plus Media library v1 built on `abhinavp06/
 ## 1. Rules
 
 - **One file:** `library.db` on internal storage, never on a media drive. TYLI keeps it in its app-data folder.
+- **SQLite build:** the amalgamation with `SQLITE_DQS=0`, `SQLITE_DEFAULT_MEMSTATUS=0`, `SQLITE_OMIT_LOAD_EXTENSION`, `SQLITE_ENABLE_FTS5`.
 - **Pragmas** (set by `db::Database::open`):
   - `journal_mode=WAL` and `synchronous=NORMAL` (file databases)
   - `foreign_keys=ON`
@@ -196,6 +197,13 @@ A category with roots can't be deleted (`InUse`).
 
 Names no track uses are deleted at the end of each metadata pass (`remove_unused_names`). A filter on a name joins one link row: `name_id = (SELECT id … WHERE kind = ? AND key = ?)`.
 
+### `audio_search` (FTS5)
+
+`CREATE VIRTUAL TABLE audio_search USING fts5(title, album, album_artist, artists, genres, tokenize = 'unicode61 remove_diacritics 2')`, rowid = `audio_tracks.entry_id`.
+- **Kept current by triggers** on `audio_tracks`: `audio_search_insert` (readable rows only), `audio_search_update`, `audio_search_delete`. Foreign-key cascades fire them too.
+- **Queried by `Field::Search`:** `t.entry_id IN (SELECT rowid FROM audio_search WHERE audio_search MATCH ?)`, with every word a quoted prefix.
+- **Build requirement:** SQLite compiled with `SQLITE_ENABLE_FTS5`.
+
 ### `video_items`
 
 | Column | Type | Meaning |
@@ -228,6 +236,10 @@ Names no track uses are deleted at the end of each metadata pass (`remove_unused
 | `video_names` | `id` PK, `kind` (1 genre, 2 person), `name`, `key`; `UNIQUE (kind, key)` |
 | `video_item_names` | `entry_id` → `video_items` ON DELETE CASCADE, `name_id` → `video_names`, `role` (1 genre, 2 director, 3 writer), `position`; PK `(entry_id, name_id, role)`, WITHOUT ROWID; index `(name_id, role, entry_id)` |
 
+### `video_search` (FTS5)
+
+`fts5(title, show, genres, directors, tokenize = 'unicode61 remove_diacritics 2')`, rowid = `video_items.entry_id`. It has the same three triggers on `video_items` (`video_search_insert`, `video_search_update`, `video_search_delete`).
+
 ## 4. Migration history
 
 | Component | Version | Shipped in | Change |
@@ -236,6 +248,8 @@ Names no track uses are deleted at the end of each metadata pass (`remove_unused
 | `file` | 2 | (v0.2.0, Media library v1) | `file_entries.added_ns` (backfilled from `mtime_ns`) and its index; `info` added to the Movies and Shows categories; `nfo=info` appended to a saved extension map that doesn't map `.nfo` yet |
 | `audio` | 1 | (v0.2.0, Media library v1) | `audio_tracks`, `audio_names`, `audio_track_names` and their indexes |
 | `video` | 1 | (v0.2.0, Media library v1) | `video_items`, `video_names`, `video_item_names` and their indexes |
+| `audio` | 2 | (v0.2.0, Media library v1) | `audio_search` FTS5 table (backfilled) and its three triggers |
+| `video` | 2 | (v0.2.0, Media library v1) | `video_search` FTS5 table (backfilled) and its three triggers |
 
 ## 5. Proposed (not built)
 

@@ -363,3 +363,43 @@ TEST_F(AudioLibraryTest, BadRequestsAreErrors) {
     EXPECT_FALSE(tracks->tracks({}, {}, core::Cursor{"garbage", 1}, 1).has_value());
     EXPECT_FALSE(tracks->groups({}, {}).has_value());  // nothing to group by
 }
+
+TEST_F(AudioLibraryTest, SearchFindsWordPrefixesAcrossFieldsIgnoringAccents) {
+    put("a.flac");
+    put("b.flac");
+    put("c.flac");
+    put("d.flac");
+    sync_music();
+    auto a = info("Radiohead", "A Moon Shaped Pool", 1, 1, "Daydreaming");
+    a.genres = {"Art Rock"};
+    store("a.flac", a);
+    store("b.flac", info("Björk", "Homogenic", 1, 1, "Jóga"));
+    auto c = info("Various", "Radio Hits", 1, 1, "Signal");
+    c.artists = {"AC/DC"};
+    store("c.flac", c);
+    ASSERT_TRUE(tracks->store_error(ids.at("d.flac").id, 1, old_mtime, "unreadable"));
+
+    const auto found = [&](const std::string& text) { return tracks->count({{{Field::Search, Value{text}}}}).value(); };
+    EXPECT_EQ(found("radio"), 2u);      // "Radiohead" (album artist) and "Radio Hits" (album)
+    EXPECT_EQ(found("radio hits"), 1u); // every word required
+    EXPECT_EQ(found("daydr"), 1u);      // a prefix of the title
+    EXPECT_EQ(found("art rock"), 1u);   // genres
+    EXPECT_EQ(found("bjork"), 1u);      // diacritics folded
+    EXPECT_EQ(found("JOGA"), 1u);
+    EXPECT_EQ(found("ac/dc"), 1u);      // punctuation splits words; no FTS syntax leaks through
+    EXPECT_EQ(found("\"unbalanced"), 0u);
+    EXPECT_EQ(found("   "), 0u);        // no words: nothing
+    EXPECT_EQ(found("unreadable"), 0u); // unreadable files aren't indexed
+
+    // Albums matching, grouped as usual.
+    const auto albums = all_groups({Field::AlbumArtist, Field::Album}, {{{Field::Search, Value{"radio"}}}}, GroupOrder::Values, false);
+    EXPECT_EQ(albums.size(), 2u);
+
+    // Retagging updates the index; removing the files empties it.
+    store("a.flac", info("Radiohead", "Kid A", 1, 1, "Everything In Its Right Place"));
+    EXPECT_EQ(found("daydr"), 0u);
+    EXPECT_EQ(found("everything"), 1u);
+    ASSERT_TRUE(library->remove_root(root));
+    EXPECT_EQ(found("radio"), 0u);
+    EXPECT_EQ(found("bjork"), 0u);
+}

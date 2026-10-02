@@ -20,7 +20,7 @@ hoardor/
 │
 ├── third_party/
 │   └── CMakeLists.txt                          third-party code
-│       ├── target hoardor_sqlite3 (static C)   SQLite 3.46.1 amalgamation via FetchContent (SHA3-256 pinned); SQLITE_DQS=0, DEFAULT_MEMSTATUS=0, OMIT_LOAD_EXTENSION
+│       ├── target hoardor_sqlite3 (static C)   SQLite 3.46.1 amalgamation via FetchContent (SHA3-256 pinned); SQLITE_DQS=0, DEFAULT_MEMSTATUS=0, OMIT_LOAD_EXTENSION, ENABLE_FTS5
 │       ├── target hoardor_pugixml (static)     pugixml 1.14 (MIT, SHA-256 pinned): parses .nfo files
 │       └── target hoardor_ffmpeg (interface)   ffmpeg libavformat/avcodec/avutil (LGPL, shared): pkg-config on Linux/macOS, -DFFMPEG_ROOT on Windows
 │
@@ -38,7 +38,7 @@ hoardor/
 │   │       ├── fn read(path) -> Result<TrackInfo>            ffmpeg; fallbacks: file name, folder name, first artist / "Unknown artist"
 │   │       ├── fn embedded_cover(path) -> Result<bytes>      the attached picture, or empty
 │   │       ├── enum Field                      Title, Artist, AlbumArtist, Album, Genre, Year, Disc, Track, Duration, Bitrate, SampleRate,
-│   │       │                                   BitDepth, Codec, Lossless, Added, Category, Root, Entry
+│   │       │                                   BitDepth, Codec, Lossless, Added, Category, Root, Entry, Search (full-text filter)
 │   │       ├── using Value · struct Condition { field, value } · struct Filter { all[] } · struct Order { field, descending }
 │   │       ├── struct Track                    a stored track + root_id, root_online, added_ns, size
 │   │       ├── struct Group                    { values[], tracks, duration_ms, added_first/last_ns, year_min/max, cover_entry, any_online }
@@ -58,7 +58,7 @@ hoardor/
 │   │       ├── fn read(path, companions) -> Result<VideoInfo>   streams + (.nfo > tags > names) + poster pick
 │   │       ├── fn embedded_poster(path) -> Result<bytes>         attached picture or a Matroska "cover" attachment
 │   │       ├── enum Field                      Type, Title, Year, Genre, Director, Show, Season, Episode, Duration, Height, Hdr, VideoCodec,
-│   │       │                                   Added, Category, Root, Entry
+│   │       │                                   Added, Category, Root, Entry, Search (full-text filter)
 │   │       ├── Value, Condition, Filter, Order, PendingEntry   (as in audio)
 │   │       ├── struct Item                     a stored movie/episode + poster_entry, has_embedded_poster, root_id, root_online, added_ns, size
 │   │       ├── struct Group                    { values[], items, duration_ms, added_first/last_ns, year_min/max, max_height, any_hdr,
@@ -196,9 +196,9 @@ hoardor/
 │   │   │                                       attached_picture(), duration_ms(stream)) · FormatCloser · fn tag(dict, keys) · any_tag(media, keys)
 │   │   │                                       · number_pair("3/12") · year_of(date) · error_text(code); ffmpeg logging silenced
 │   │   └── query.hpp / query.cpp               the generic query builder: struct FieldSql { value, key, text, normalized, names_kind,
-│   │                                           link_extra, broad } · struct Schema { table, joins, id, base_where, link/names tables, fields,
+│   │                                           link_extra, broad, search_table } · struct Schema { table, joins, id, base_where, link/names tables, fields,
 │   │                                           group_indexes } · Condition, Order, Built · fn items / groups / count / group_count ·
-│   │                                           bind_all · cursor_from; (internal) encode/decode cursors, filter_sql (joins + where), after_sql
+│   │                                           bind_all · cursor_from · search_query(text) (words -> "word"* terms); (internal) encode/decode cursors, filter_sql (joins + where), after_sql
 │   │
 │   ├── audio/
 │   │   ├── read.cpp                            audio::read, audio::embedded_cover; (internal) is_lossless(codec), tag separators
@@ -272,7 +272,7 @@ hoardor/
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 181 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 183 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -288,7 +288,7 @@ hoardor/
 │   ├── audio/
 │   │   ├── read_test.cpp                       7 TESTs (AudioRead): FlacTagsAndHiResStream, Mp3AtConstantBitRate, M4aOggOpusAndWav (+ ALAC),
 │   │   │                                       MissingTagsFallBackToNames, UnicodeNamesAndTags, EmbeddedCover, UnreadableAndMissingFiles
-│   │   └── library_test.cpp                    13 TESTs (AudioLibraryTest): PendingListsSettledUnreadAudioOnly, ChangedFilesBecomePendingAgain,
+│   │   └── library_test.cpp                    14 TESTs (AudioLibraryTest): SearchFindsWordPrefixesAcrossFieldsIgnoringAccents, PendingListsSettledUnreadAudioOnly, ChangedFilesBecomePendingAgain,
 │   │                                           OfflineRootsHaveNoPendingWorkButStillList, UnreadableFilesAreRecordedNotListedNotRetried,
 │   │                                           StoredFieldsComeBack, FilterIgnoresCaseAndArticles_OrderByDiscAndTrack,
 │   │                                           PagingVisitsEveryTrackOnceInEveryOrder, AlbumsAreGroupsInEveryOrder, ManyArtistsAndGenresPerTrack,
@@ -299,7 +299,7 @@ hoardor/
 │   │   │                                       Names.{Episodes, Movies, SeasonFoldersAndCleaning}
 │   │   ├── read_test.cpp                       7 TESTs (VideoRead): StreamsLanguagesAndTags, HdrIsRecognized, NfoBeatsTagsAndNames_PosterIsPicked,
 │   │   │                                       EpisodeFromNamesWithTheShowsNfoAndPoster, MovieFromNameOnly, EmbeddedPosterAttachment, NotAVideo
-│   │   └── library_test.cpp                    7 TESTs (VideoLibraryTest): OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
+│   │   └── library_test.cpp                    8 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
 │   │                                           DirectorsGenresAndWriters, PostersComeFromCompanionImagesThatStillExist, PendingAndErrorsAndStreams,
 │   │                                           PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved
 │   ├── db/

@@ -36,3 +36,4 @@ Not in scope:
   - an album page of a genre in about 3.6 ms
   - one album's tracks in about 0.1 ms
   - the first album page by date added in about 75 ms, because it aggregates every album (a known limitation)
+- **Search** (since 2026-10-02): `Field::Search`, full-text over the `audio_search` FTS5 table (migration 2).
