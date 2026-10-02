@@ -139,8 +139,10 @@ public:
 
     // Settled audio entries with no metadata or stale metadata, by id, in online roots
     // (of one category, or all). Reads SQLite only.
-    Result<std::vector<PendingEntry>> pending(std::optional<CategoryId> category, EntryId after = 0, std::size_t limit = 200);
-    Result<std::uint64_t> pending_count(std::optional<CategoryId> category);
+    // `root`: only that folder's entries (master reads each drive on its own worker).
+    Result<std::vector<PendingEntry>> pending(std::optional<CategoryId> category, EntryId after = 0, std::size_t limit = 200,
+                                              std::optional<RootId> root = std::nullopt);
+    Result<std::uint64_t> pending_count(std::optional<CategoryId> category, std::optional<RootId> root = std::nullopt);
     // Stores what read() returned. Runs inside the caller's transaction, if any.
     Result<void> store(EntryId entry, std::int64_t source_size, std::int64_t source_mtime_ns, const TrackInfo& info);
     // Records that the file couldn't be read, so it isn't retried until it changes.

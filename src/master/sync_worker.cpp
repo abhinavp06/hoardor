@@ -3,18 +3,26 @@
 #include "file/text.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <functional>
 #include <map>
+#include <mutex>
+#include <thread>
 
 namespace hoardor::master {
 
 file::Result<std::unique_ptr<SyncWorker>> SyncWorker::start(const std::filesystem::path& database_file,
-                                                            SyncCallbacks callbacks, file::MountPointLister mounts) {
+                                                            SyncCallbacks callbacks, file::MountPointLister mounts,
+                                                            file::DeviceLookup device_of) {
     auto database = db::Database::open(database_file);
     if (!database) return std::unexpected(file::Error{file::ErrorCode::Database, database.error().message});
 
     // unique_ptr: the thread refers to the worker, so the worker must never move.
     std::unique_ptr<SyncWorker> worker(new SyncWorker(std::move(*database), std::move(callbacks)));
+    worker->database_file_ = database_file;
+    worker->mounts_ = mounts;
+    worker->device_of_ = std::move(device_of);
     auto library = file::Library::open(worker->database_, std::move(mounts));
     if (!library) return std::unexpected(library.error());
     worker->library_.emplace(std::move(*library));
@@ -106,7 +114,7 @@ void SyncWorker::run(std::stop_token stop) {
         // Shutting the worker down also stops the running job.
         std::stop_callback forward(stop, [source]() mutable { source.request_stop(); });
         if (job.kind == Kind::Sync) {
-            const file::SyncReport report = library_->sync(job.scope, source.get_token(), callbacks_.on_progress);
+            const file::SyncReport report = sync(job.scope, source.get_token());
             if (callbacks_.on_finished) callbacks_.on_finished(job.scope, report);
             if (!report.cancelled && !source.stop_requested()) {
                 std::lock_guard lock(mutex_);
@@ -134,8 +142,82 @@ void SyncWorker::run(std::stop_token stop) {
     }
 }
 
+namespace {
+
+namespace fs = std::filesystem;
+
+// Roots grouped by the physical drive that holds them, in their original order. Offline or
+// unidentifiable roots share one group: they finish at once (offline) or are few.
+std::vector<std::vector<std::size_t>> by_device(const std::vector<file::Root>& roots, const file::DeviceLookup& device_of) {
+    std::map<std::string, std::vector<std::size_t>> groups;
+    std::vector<std::string> order;
+    for (std::size_t i = 0; i < roots.size(); ++i) {
+        std::string device = device_of ? device_of(file::detail::from_utf8(roots[i].path)) : std::string();
+        if (!groups.contains(device)) order.push_back(device);
+        groups[device].push_back(i);
+    }
+    std::vector<std::vector<std::size_t>> out;
+    for (const auto& d : order) out.push_back(groups[d]);
+    return out;
+}
+
+// Runs `work(group)` for every group on up to `threads` threads (the calling thread included).
+void for_each_group(std::size_t groups, int threads, const std::function<void(std::size_t)>& work) {
+    std::atomic<std::size_t> next{0};
+    const auto worker = [&] {
+        for (std::size_t g = next++; g < groups; g = next++) work(g);
+    };
+    std::vector<std::jthread> extra;
+    const std::size_t count = std::min<std::size_t>(groups, static_cast<std::size_t>(std::max(1, threads)));
+    for (std::size_t i = 1; i < count; ++i) extra.emplace_back(worker);
+    worker();
+}
+
+}
+
+file::SyncReport SyncWorker::sync(Scope scope, std::stop_token stop) {
+    auto settings = library_->load_settings();
+    auto roots = library_->roots(scope);
+    if (!settings || !roots || roots->size() < 2 || settings->parallel_devices < 2) {
+        return library_->sync(scope, stop, callbacks_.on_progress);
+    }
+    const auto groups = by_device(*roots, device_of_);
+    if (groups.size() < 2) return library_->sync(scope, stop, callbacks_.on_progress);
+
+    // One worker per drive, each on its own connection (SQLite: one connection per thread;
+    // writers take turns in short batches). Reports keep the roots' order.
+    file::SyncReport report;
+    report.roots.resize(roots->size());
+    const std::size_t count = roots->size();
+    for_each_group(groups.size(), settings->parallel_devices, [&](std::size_t g) {
+        auto database = db::Database::open(database_file_);
+        std::optional<file::Library> library;
+        if (database) {
+            if (auto lib = file::Library::open(*database, mounts_)) library.emplace(std::move(*lib));
+        }
+        for (std::size_t index : groups[g]) {
+            if (!library) {
+                report.roots[index].root_id = (*roots)[index].id;
+                report.roots[index].message = "cannot open the library on a second connection";
+                continue;
+            }
+            const auto progress = [&, index](const file::SyncProgress& p) {
+                if (!callbacks_.on_progress) return;
+                file::SyncProgress global = p;
+                global.root_index = index;
+                global.root_count = count;
+                callbacks_.on_progress(global);
+            };
+            report.roots[index] = library->sync_root((*roots)[index].id, stop, progress);
+        }
+    });
+    report.cancelled = stop.stop_requested() || std::any_of(report.roots.begin(), report.roots.end(), [](const auto& r) {
+                           return r.outcome == file::RootSyncOutcome::Cancelled;
+                       });
+    return report;
+}
+
 MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
-    namespace fs = std::filesystem;
     MetadataReport report;
     const auto started = std::chrono::steady_clock::now();
     const auto elapsed = [&] {
@@ -146,122 +228,152 @@ MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
     auto audio_total = audio_->pending_count(scope);
     auto video_total = video_->pending_count(scope);
     if (!settings || !roots || !audio_total || !video_total) return report;
+    const std::uint64_t total = *audio_total + *video_total;
+    if (total == 0) return report;
 
-    // Only roots the sync just found online are read (pending() also checks that).
-    std::map<file::RootId, fs::path> online;
+    // Only roots the sync found online are read (pending() also checks that), one worker per drive.
+    std::vector<file::Root> online;
     for (const file::Root& r : *roots) {
-        if (r.status == file::RootStatus::Online) online[r.id] = file::detail::from_utf8(r.path);
+        if (r.status == file::RootStatus::Online) online.push_back(r);
     }
-    MetadataProgress progress{0, *audio_total + *video_total};
-    if (progress.total == 0) return report;
+    const auto groups = by_device(online, device_of_);
 
-    // Short write batches, like the sync, so other connections never wait long.
-    std::optional<db::Transaction> tx;
-    int rows = 0;
-    auto batch_started = std::chrono::steady_clock::now();
-    auto last_report = batch_started;
-    const auto commit = [&] {
-        if (tx) (void)tx->commit();
-        tx.reset();
-    };
-    const auto before_write = [&] {
-        if (!tx) {
-            if (auto begun = db::Transaction::begin(database_)) tx.emplace(std::move(*begun));
-            rows = 0;
-            batch_started = std::chrono::steady_clock::now();
-        }
-    };
-    const auto after_write = [&] {
-        ++progress.done;
+    // Shared between the drive workers.
+    std::mutex shared;
+    std::atomic<std::uint64_t> done{0};
+    auto last_report = started;
+    const auto progressed = [&] {
+        const std::uint64_t now_done = ++done;
+        if (!callbacks_.on_metadata_progress) return;
+        std::lock_guard lock(shared);
         const auto now = std::chrono::steady_clock::now();
-        if (++rows >= settings->batch_max_rows || now - batch_started >= std::chrono::milliseconds(settings->batch_max_milliseconds)) {
-            commit();
-        }
-        if (callbacks_.on_metadata_progress && now - last_report >= std::chrono::milliseconds(250)) {
-            commit();  // callbacks never run inside a write transaction
-            last_report = now;
-            progress.elapsed_ms = elapsed();
-            callbacks_.on_metadata_progress(progress);
-        }
+        if (now - last_report < std::chrono::milliseconds(250)) return;
+        last_report = now;
+        callbacks_.on_metadata_progress(MetadataProgress{now_done, total, elapsed()});
     };
-    // A failed read: unreadable file, or the file or its drive went away (then it's left alone).
-    std::map<file::RootId, bool> lost;
-    const auto gone = [&](file::RootId root, const fs::path& path) {
-        std::error_code ec;
-        if (!fs::is_directory(online[root], ec)) lost[root] = true;
-        return lost[root] || !fs::exists(path, ec);
+    const auto count = [&](std::uint64_t MetadataReport::*field) {
+        std::lock_guard lock(shared);
+        ++(report.*field);
     };
 
-    // Audio.
-    for (audio::EntryId after = 0; !stop.stop_requested();) {
-        auto page = audio_->pending(scope, after, 200);
-        if (!page || page->empty()) break;
-        for (const auto& p : *page) {
-            after = p.entry_id;
-            if (stop.stop_requested()) break;
-            if (lost[p.root_id] || !online.contains(p.root_id)) {
-                ++report.skipped;
-                continue;
+    // One drive's roots, on the given connection and libraries.
+    const auto read_group = [&](const std::vector<std::size_t>& group, db::Database& db, file::Library& files,
+                                audio::Library& tracks, video::Library& videos) {
+        std::optional<db::Transaction> tx;
+        int rows = 0;
+        auto batch_started = std::chrono::steady_clock::now();
+        auto last_commit_for_progress = batch_started;
+        const auto commit = [&] {
+            if (tx) (void)tx->commit();
+            tx.reset();
+        };
+        const auto before_write = [&] {
+            if (!tx) {
+                if (auto begun = db::Transaction::begin(db)) tx.emplace(std::move(*begun));
+                rows = 0;
+                batch_started = std::chrono::steady_clock::now();
             }
-            const fs::path path = online[p.root_id] / file::detail::from_utf8(p.relative_path);
-            auto info = audio::read(path);
-            if (!info && gone(p.root_id, path)) {
-                ++report.skipped;
-                continue;
+        };
+        const auto after_write = [&] {
+            const auto now = std::chrono::steady_clock::now();
+            // Short batches, and none left open across a progress report (callbacks never run
+            // inside a write transaction, and readers see progress as it's reported).
+            if (++rows >= settings->batch_max_rows || now - batch_started >= std::chrono::milliseconds(settings->batch_max_milliseconds) ||
+                now - last_commit_for_progress >= std::chrono::milliseconds(250)) {
+                commit();
+                last_commit_for_progress = now;
             }
-            before_write();
-            if (info) {
-                if (audio_->store(p.entry_id, p.size, p.mtime_ns, *info)) ++report.read;
-            } else if (audio_->store_error(p.entry_id, p.size, p.mtime_ns, info.error().message)) {
-                ++report.failed;
-            }
-            after_write();
-        }
-    }
+            progressed();
+        };
 
-    // Video, with each file's .nfo and images (up to the show's folder).
-    for (video::EntryId after = 0; !stop.stop_requested();) {
-        auto page = video_->pending(scope, after, 200);
-        if (!page || page->empty()) break;
-        for (const auto& p : *page) {
-            after = p.entry_id;
-            if (stop.stop_requested()) break;
-            if (lost[p.root_id] || !online.contains(p.root_id)) {
-                ++report.skipped;
-                continue;
-            }
-            const fs::path base = online[p.root_id];
-            const fs::path path = base / file::detail::from_utf8(p.relative_path);
-            std::vector<fs::path> companion_paths;
-            std::vector<file::EntryId> companion_ids;
-            if (auto companions = library_->companions(p.entry_id, 2)) {
-                for (const file::Entry& c : *companions) {
-                    companion_paths.push_back(base / file::detail::from_utf8(c.relative_path));
-                    companion_ids.push_back(c.id);
+        for (std::size_t index : group) {
+            const file::Root& root = online[index];
+            const fs::path base = file::detail::from_utf8(root.path);
+            bool lost = false;
+            // A failed read: an unreadable file, or the file or its drive went away (left alone).
+            const auto gone = [&](const fs::path& path) {
+                std::error_code ec;
+                if (!fs::is_directory(base, ec)) lost = true;
+                return lost || !fs::exists(path, ec);
+            };
+
+            for (audio::EntryId after = 0; !stop.stop_requested() && !lost;) {
+                auto page = tracks.pending(scope, after, 200, root.id);
+                if (!page || page->empty()) break;
+                for (const auto& p : *page) {
+                    after = p.entry_id;
+                    if (stop.stop_requested() || lost) break;
+                    const fs::path path = base / file::detail::from_utf8(p.relative_path);
+                    auto info = audio::read(path);
+                    if (!info && gone(path)) {
+                        count(&MetadataReport::skipped);
+                        continue;
+                    }
+                    before_write();
+                    if (info) {
+                        if (tracks.store(p.entry_id, p.size, p.mtime_ns, *info)) count(&MetadataReport::read);
+                    } else if (tracks.store_error(p.entry_id, p.size, p.mtime_ns, info.error().message)) {
+                        count(&MetadataReport::failed);
+                    }
+                    after_write();
                 }
             }
-            auto info = video::read(path, companion_paths);
-            if (!info && gone(p.root_id, path)) {
-                ++report.skipped;
-                continue;
+
+            for (video::EntryId after = 0; !stop.stop_requested() && !lost;) {
+                auto page = videos.pending(scope, after, 200, root.id);
+                if (!page || page->empty()) break;
+                for (const auto& p : *page) {
+                    after = p.entry_id;
+                    if (stop.stop_requested() || lost) break;
+                    const fs::path path = base / file::detail::from_utf8(p.relative_path);
+                    std::vector<fs::path> companion_paths;
+                    std::vector<file::EntryId> companion_ids;
+                    if (auto companions = files.companions(p.entry_id, 2)) {
+                        for (const file::Entry& c : *companions) {
+                            companion_paths.push_back(base / file::detail::from_utf8(c.relative_path));
+                            companion_ids.push_back(c.id);
+                        }
+                    }
+                    auto info = video::read(path, companion_paths);
+                    if (!info && gone(path)) {
+                        count(&MetadataReport::skipped);
+                        continue;
+                    }
+                    before_write();
+                    if (info) {
+                        const file::EntryId poster = info->poster_index >= 0 ? companion_ids[static_cast<std::size_t>(info->poster_index)] : 0;
+                        if (videos.store(p.entry_id, p.size, p.mtime_ns, *info, poster)) count(&MetadataReport::read);
+                    } else if (videos.store_error(p.entry_id, p.size, p.mtime_ns, info.error().message)) {
+                        count(&MetadataReport::failed);
+                    }
+                    after_write();
+                }
             }
-            before_write();
-            if (info) {
-                const file::EntryId poster = info->poster_index >= 0 ? companion_ids[static_cast<std::size_t>(info->poster_index)] : 0;
-                if (video_->store(p.entry_id, p.size, p.mtime_ns, *info, poster)) ++report.read;
-            } else if (video_->store_error(p.entry_id, p.size, p.mtime_ns, info.error().message)) {
-                ++report.failed;
-            }
-            after_write();
         }
+        commit();
+    };
+
+    if (groups.size() < 2 || settings->parallel_devices < 2) {
+        std::vector<std::size_t> all;
+        for (const auto& g : groups) all.insert(all.end(), g.begin(), g.end());
+        read_group(all, database_, *library_, *audio_, *video_);
+    } else {
+        for_each_group(groups.size(), settings->parallel_devices, [&](std::size_t g) {
+            auto database = db::Database::open(database_file_);
+            if (!database) return;
+            auto files = file::Library::open(*database, mounts_);
+            auto tracks = audio::Library::open(*database);
+            auto videos = video::Library::open(*database);
+            if (!files || !tracks || !videos) return;
+            read_group(groups[g], *database, *files, *tracks, *videos);
+        });
     }
-    commit();
+
     report.cancelled = stop.stop_requested();
     report.elapsed_ms = elapsed();
-    progress.elapsed_ms = report.elapsed_ms;
     (void)audio_->remove_unused_names();
     (void)video_->remove_unused_names();
-    if (callbacks_.on_metadata_progress) callbacks_.on_metadata_progress(progress);
+    if (callbacks_.on_metadata_progress) callbacks_.on_metadata_progress(MetadataProgress{done.load(), total, report.elapsed_ms});
     return report;
 }
 

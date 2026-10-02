@@ -93,8 +93,9 @@ TEST(Validate, FlagsOutOfRangeNumbers) {
     s.mass_removal_threshold_percent = 150;
     s.batch_max_rows = 0;
     s.settle_window_seconds = -1;
+    s.parallel_devices = 0;
     const auto problems = hoardor::file::validate(s);
-    ASSERT_EQ(problems.size(), 3u);
+    ASSERT_EQ(problems.size(), 4u);
     EXPECT_NE(problems[0].find("between 0 and 86400"), std::string::npos) << problems[0];
 }
 

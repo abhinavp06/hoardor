@@ -60,6 +60,7 @@ TEST_F(LibraryTest, SettingsRoundTripEveryField) {
     s.progress_interval_files = 10;
     s.relocation_sample_size = 5;
     s.relocation_min_match_percent = 60;
+    s.parallel_devices = 2;
     ASSERT_TRUE(library->save_settings(s));
     const Settings l = library->load_settings().value();
     EXPECT_EQ(l.extension_kinds, (std::unordered_map<std::string, FileKind>{{"mka", FileKind::Audio}, {"nfo", FileKind::Text}}));
@@ -73,6 +74,7 @@ TEST_F(LibraryTest, SettingsRoundTripEveryField) {
     EXPECT_EQ(l.progress_interval_files, 10);
     EXPECT_EQ(l.relocation_sample_size, 5);
     EXPECT_EQ(l.relocation_min_match_percent, 60);
+    EXPECT_EQ(l.parallel_devices, 2);
 }
 
 TEST_F(LibraryTest, CorruptSettingValuesFallBackToDefaults) {

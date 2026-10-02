@@ -60,6 +60,10 @@ struct Settings {
     int relocation_sample_size = 20;
     int relocation_min_match_percent = 80;
 
+    // How many physical drives sync and read metadata at the same time (one worker per
+    // drive, never two on one disk). 1: one drive at a time.
+    int parallel_devices = 4;
+
     static Settings defaults();
 };
 
@@ -78,6 +82,7 @@ inline constexpr SettingRange batch_max_milliseconds{1, 60'000};
 inline constexpr SettingRange progress_interval_files{1, 1'000'000};
 inline constexpr SettingRange relocation_sample_size{0, 10'000};
 inline constexpr SettingRange relocation_min_match_percent{0, 100};
+inline constexpr SettingRange parallel_devices{1, 16};
 }
 
 // Problems with these settings, in plain words (empty when they're valid).

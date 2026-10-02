@@ -50,6 +50,11 @@ public:
 After each requested sync, and unless it was cancelled, `SyncWorker` **queues a metadata job** for that scope (since 2026-10-02; it used to run inside the sync). The job reads the scope's audio and video files that are new, changed, or never read, on the same thread, while the drives are awake (`features/media_listing.md` §4.1).
 - **Syncs go ahead of metadata jobs.** A sync request pauses a running pass, which resumes after the sync.
 - **`syncing()` / `reading()`** tell them apart.
+- **One worker per physical drive** (since 2026-10-02):
+  - roots are grouped by `file::device_of` (injectable as `start(…, device_of)` for tests)
+  - up to `file::Settings::parallel_devices` drives at once, each worker with its own connection
+  - the same split applies to syncs and to metadata passes
+  - sync reports keep the roots' order
 
 ```cpp
 struct MetadataProgress { std::uint64_t done, total; };

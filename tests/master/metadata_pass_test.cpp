@@ -11,6 +11,8 @@
 #include <atomic>
 #include <fstream>
 #include <mutex>
+#include <set>
+#include <thread>
 
 namespace fs = std::filesystem;
 using namespace hoardor;
@@ -223,4 +225,72 @@ TEST_F(MetadataPassTest, ASyncRequestPausesThePassWhichThenResumes) {
     EXPECT_EQ(tracks->count({}).value(), 401u);
     EXPECT_EQ(syncs.load(), asked ? 2 : 1);  // a fast machine may finish before the first progress report
     RecordProperty("paused", asked ? "yes" : "no");
+}
+
+TEST_F(MetadataPassTest, TwoDrivesSyncAndReadInParallel) {
+    HOARDOR_SKIP_WITHOUT_FFMPEG();
+    // Two folders on separate (pretend) drives, 150 tracks each.
+    for (const char* drive : {"DriveA", "DriveB"}) {
+        const fs::path music = dir.path() / drive / "Music";
+        ASSERT_TRUE(test::make_media(music / "a.flac", {.tags = {{"album", drive}, {"artist", "X"}}}));
+        for (int i = 0; i < 149; ++i) fs::copy_file(music / "a.flac", music / ("c" + std::to_string(i) + ".flac"));
+        settle(music);
+        ASSERT_TRUE(library->add_root(category("Music"), music, drive, false));
+    }
+    std::mutex m;
+    std::set<std::thread::id> sync_threads;
+    std::vector<file::SyncReport> syncs;
+    std::vector<master::MetadataReport> passes;
+    auto worker = master::SyncWorker::start(
+        dir.path() / "library.db",
+        {.on_progress = [&](const file::SyncProgress& p) {
+             std::lock_guard l(m);
+             sync_threads.insert(std::this_thread::get_id());
+             EXPECT_EQ(p.root_count, 2u);
+         },
+         .on_finished = [&](auto, const file::SyncReport& r) { std::lock_guard l(m); syncs.push_back(r); },
+         .on_metadata_progress = {},
+         .on_metadata_finished = [&](auto, const master::MetadataReport& r) { std::lock_guard l(m); passes.push_back(r); }},
+        no_mounts(), [](const fs::path& p) { return p.string().find("DriveA") != std::string::npos ? "a" : "b"; });
+    ASSERT_TRUE(worker.has_value());
+    (*worker)->request_sync();
+    (*worker)->wait_idle();
+
+    std::lock_guard l(m);
+    ASSERT_EQ(syncs.size(), 1u);
+    ASSERT_EQ(syncs[0].roots.size(), 2u);
+    for (const auto& r : syncs[0].roots) {
+        EXPECT_EQ(r.outcome, file::RootSyncOutcome::Synced) << r.message;
+        EXPECT_EQ(r.added, 150u);
+    }
+    EXPECT_LT(syncs[0].roots[0].root_id, syncs[0].roots[1].root_id);  // reports keep the roots' order
+    EXPECT_GE(sync_threads.size(), 2u);                                 // two drives, two workers
+    ASSERT_EQ(passes.size(), 1u);
+    EXPECT_EQ(passes[0].read, 300u);
+    EXPECT_EQ(tracks->group_count(std::vector<audio::Field>{audio::Field::Album}, {}).value(), 2u);
+}
+
+TEST_F(MetadataPassTest, OneDriveAtATimeWhenTheSettingSaysSo) {
+    HOARDOR_SKIP_WITHOUT_FFMPEG();
+    for (const char* drive : {"DriveA", "DriveB"}) {
+        const fs::path music = dir.path() / drive / "Music";
+        ASSERT_TRUE(test::make_media(music / "a.flac", {}));
+        settle(music);
+        ASSERT_TRUE(library->add_root(category("Music"), music, drive, false));
+    }
+    auto s = library->load_settings().value();
+    s.parallel_devices = 1;
+    ASSERT_TRUE(library->save_settings(s));
+    std::mutex m;
+    std::set<std::thread::id> threads;
+    auto worker = master::SyncWorker::start(
+        dir.path() / "library.db",
+        {.on_progress = [&](const file::SyncProgress&) { std::lock_guard l(m); threads.insert(std::this_thread::get_id()); },
+         .on_finished = {}, .on_metadata_progress = {}, .on_metadata_finished = {}},
+        no_mounts(), [](const fs::path& p) { return p.string().find("DriveA") != std::string::npos ? "a" : "b"; });
+    ASSERT_TRUE(worker.has_value());
+    (*worker)->request_sync();
+    (*worker)->wait_idle();
+    EXPECT_EQ(threads.size(), 1u);
+    EXPECT_EQ(tracks->count({}).value(), 2u);
 }

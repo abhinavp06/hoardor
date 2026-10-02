@@ -197,6 +197,7 @@ std::vector<std::pair<std::string, std::string>> serialize(const Settings& s) {
         {"progress_interval_files", std::to_string(s.progress_interval_files)},
         {"relocation_sample_size", std::to_string(s.relocation_sample_size)},
         {"relocation_min_match_percent", std::to_string(s.relocation_min_match_percent)},
+        {"parallel_devices", std::to_string(s.parallel_devices)},
     };
 }
 
@@ -240,6 +241,8 @@ void apply(Settings& s, const std::string& key, const std::string& value) {
     } else if (key == "relocation_min_match_percent") {
         parse_int<int>(value, s.relocation_min_match_percent, limits::relocation_min_match_percent.min,
                        limits::relocation_min_match_percent.max);
+    } else if (key == "parallel_devices") {
+        parse_int<int>(value, s.parallel_devices, limits::parallel_devices.min, limits::parallel_devices.max);
     }
     // Unknown keys (e.g. written by a newer build) are ignored.
 }

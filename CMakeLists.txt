@@ -71,14 +71,17 @@ add_library(hoardor
 # Platform backends (ARCHITECTURE §5): one implementation per OS, chosen here, never by #ifdef in shared code.
 if(WIN32)
     target_sources(hoardor PRIVATE
+        src/file/platform/device_windows.cpp
         src/file/platform/file_info_windows.cpp
         src/file/platform/mount_points_windows.cpp)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(hoardor PRIVATE
+        src/file/platform/device_linux.cpp
         src/file/platform/file_info_posix.cpp
         src/file/platform/mount_points_linux.cpp)
 else()
     target_sources(hoardor PRIVATE
+        src/file/platform/device_other.cpp
         src/file/platform/file_info_posix.cpp
         src/file/platform/mount_points_other.cpp)
 endif()

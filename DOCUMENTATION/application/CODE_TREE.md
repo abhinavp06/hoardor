@@ -127,6 +127,8 @@ hoardor/
 │   │   │
 │   │   ├── mount_points.hpp
 │   │   │   ├── fn list_mount_points()          the OS's mounted volumes (implementations in src/file/platform/)
+│   │   │   ├── fn device_of(path) -> string    the physical drive holding a path (partitions of one disk match); "" if unknown
+│   │   │   ├── using DeviceLookup              std::function naming a path's device; tests inject fake drives
 │   │   │   └── using MountPointLister          std::function returning mount points; tests inject plain folders
 │   │   │
 │   │   └── library.hpp
@@ -179,7 +181,8 @@ hoardor/
 │               ├── SyncWorker(Database, SyncCallbacks)   (private)
 │               ├── enum Kind (Sync, Metadata) · struct Job { kind, scope }   (private) the queue's jobs; syncs first
 │               ├── .run(stop_token)            (private) the worker loop: a sync (then queue its metadata job), or a metadata job (requeued if paused)
-│               ├── .read_metadata(scope, stop) (private) audio then video pending entries: read, store in short batches, skip gone files
+│               ├── .sync(scope, stop)          (private) roots grouped by device, one worker (own connection) per drive, up to parallel_devices
+│               ├── .read_metadata(scope, stop) (private) the same split per drive: audio then video pending entries per root, short batches, skip gone files
 │               └── members                     database_, library_, audio_, video_, callbacks_, mutex_, changed_ (condition_variable_any),
 │                                               queue_ (deque<Job>), running_, current_ (stop_source), paused_, thread_ (jthread, last)
 │
@@ -259,14 +262,18 @@ hoardor/
 │   │       ├── file_info.hpp                   ns detail: struct FileInfo { size, mtime_ns }; fn file_info(directory_entry)
 │   │       ├── file_info_posix.cpp             one stat() (Linux st_mtim / macOS st_mtimespec)
 │   │       ├── file_info_windows.cpp           values cached by the directory listing (no system call)
-│   │       ├── mount_points_linux.cpp          list_mount_points from /proc/self/mountinfo; unescape(field) (\040 etc.)
+│   │       ├── device_linux.cpp                device_of: /sys/dev/block/MAJ:MIN -> the disk (a partition's parent)
+│       ├── device_windows.cpp              device_of: volume -> IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS disk number, else volume serial
+│       ├── device_other.cpp                device_of: st_dev (macOS until DiskArbitration)
+│       ├── mount_points_linux.cpp          list_mount_points from /proc/self/mountinfo; unescape(field) (\040 etc.)
 │   │       ├── mount_points_windows.cpp        list_mount_points from GetLogicalDriveStringsW
 │   │       └── mount_points_other.cpp          returns {} (macOS until file engine phase 4)
 │   │
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 179 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 181 tests, run by ctest)
+│   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
 │   ├── support/
@@ -355,7 +362,7 @@ hoardor/
 │   │       └── playback + relocation           ResolveForPlayback, ManualRelocationWithMarker, ManualRelocationRefusesAnotherRootsFolder,
 │   │                                           ManualRelocationWithoutMarkerChecksASample, UnreadableSubfolderKeepsItsEntries
 │   └── master/
-│       ├── metadata_pass_test.cpp              5 TESTs (MetadataPassTest, real files): ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
+│       ├── metadata_pass_test.cpp              7 TESTs (MetadataPassTest, real files): TwoDrivesSyncAndReadInParallel, OneDriveAtATimeWhenTheSettingSaysSo, ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
 │       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, CancelStopsThePassAndTheRestWaits
 │       └── sync_worker_test.cpp                8 TESTs (class SyncWorkerTest: a real DB file + .music(), .add_music_root(n), .set_settings(edit))
 │           └── SyncWorkerTest.*                RunsARequestedSyncInTheBackground, DuplicateRequestsAreIgnored,

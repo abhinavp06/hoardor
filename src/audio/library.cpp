@@ -185,7 +185,7 @@ constexpr std::string_view pending_sql =
     "FROM file_entries e JOIN file_roots r ON r.id = e.root_id LEFT JOIN audio_tracks t ON t.entry_id = e.id "
     "WHERE e.kind = 1 AND e.unsettled = 0 AND r.status = 1 "
     "AND (t.entry_id IS NULL OR t.source_size <> e.size OR t.source_mtime_ns <> e.mtime_ns) "
-    "AND (? IS NULL OR r.category_id = ?)";
+    "AND (? IS NULL OR r.category_id = ?) AND (? IS NULL OR e.root_id = ?)";
 
 }
 
@@ -194,13 +194,16 @@ Result<Library> Library::open(db::Database& database) {
     return Library(database);
 }
 
-Result<std::vector<PendingEntry>> Library::pending(std::optional<CategoryId> category, EntryId after, std::size_t limit) {
+Result<std::vector<PendingEntry>> Library::pending(std::optional<CategoryId> category, EntryId after, std::size_t limit,
+                                                   std::optional<RootId> root) {
     auto st = db_->prepare("SELECT e.id, e.root_id, e.relative_path, e.size, e.mtime_ns " + std::string(pending_sql) +
                            " AND e.id > ? ORDER BY e.id LIMIT ?");
     if (!st) return std::unexpected(database_error(st.error()));
     if (category) st->bind(1, *category).bind(2, *category);
     else st->bind_null(1).bind_null(2);
-    st->bind(3, after).bind(4, static_cast<std::int64_t>(limit));
+    if (root) st->bind(3, *root).bind(4, *root);
+    else st->bind_null(3).bind_null(4);
+    st->bind(5, after).bind(6, static_cast<std::int64_t>(limit));
     std::vector<PendingEntry> out;
     while (true) {
         auto row = st->step();
@@ -211,11 +214,13 @@ Result<std::vector<PendingEntry>> Library::pending(std::optional<CategoryId> cat
     }
 }
 
-Result<std::uint64_t> Library::pending_count(std::optional<CategoryId> category) {
+Result<std::uint64_t> Library::pending_count(std::optional<CategoryId> category, std::optional<RootId> root) {
     auto st = db_->prepare("SELECT COUNT(*) " + std::string(pending_sql));
     if (!st) return std::unexpected(database_error(st.error()));
     if (category) st->bind(1, *category).bind(2, *category);
     else st->bind_null(1).bind_null(2);
+    if (root) st->bind(3, *root).bind(4, *root);
+    else st->bind_null(3).bind_null(4);
     auto row = st->step();
     if (!row) return std::unexpected(database_error(row.error()));
     return static_cast<std::uint64_t>(st->column_int64(0));

@@ -148,8 +148,10 @@ public:
     // Runs the video engine's migrations (after file::Library::open).
     static Result<Library> open(db::Database& database);
 
-    Result<std::vector<PendingEntry>> pending(std::optional<CategoryId> category, EntryId after = 0, std::size_t limit = 200);
-    Result<std::uint64_t> pending_count(std::optional<CategoryId> category);
+    // `root`: only that folder's entries (master reads each drive on its own worker).
+    Result<std::vector<PendingEntry>> pending(std::optional<CategoryId> category, EntryId after = 0, std::size_t limit = 200,
+                                              std::optional<RootId> root = std::nullopt);
+    Result<std::uint64_t> pending_count(std::optional<CategoryId> category, std::optional<RootId> root = std::nullopt);
     // poster_entry: the file entry of the companion image read() chose (0: none).
     Result<void> store(EntryId entry, std::int64_t source_size, std::int64_t source_mtime_ns, const VideoInfo& info,
                        EntryId poster_entry = 0);

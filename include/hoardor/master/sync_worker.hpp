@@ -55,7 +55,8 @@ public:
     // setting sync_on_startup is true, a global sync is queued right away.
     static file::Result<std::unique_ptr<SyncWorker>> start(const std::filesystem::path& database_file,
                                                            SyncCallbacks callbacks,
-                                                           file::MountPointLister mounts = file::list_mount_points);
+                                                           file::MountPointLister mounts = file::list_mount_points,
+                                                           file::DeviceLookup device_of = file::device_of);
 
     // Cancels the running sync, drops the queue, and joins the thread.
     ~SyncWorker();
@@ -85,8 +86,13 @@ private:
 
     SyncWorker(db::Database database, SyncCallbacks callbacks) : database_(std::move(database)), callbacks_(std::move(callbacks)) {}
     void run(std::stop_token stop);
+    // A sync with one worker per physical drive (file::device_of), up to parallel_devices.
+    file::SyncReport sync(Scope scope, std::stop_token stop);
     MetadataReport read_metadata(Scope scope, std::stop_token stop);
 
+    std::filesystem::path database_file_; // drive workers open their own connections to it
+    file::MountPointLister mounts_;
+    file::DeviceLookup device_of_;
     db::Database database_;               // used only by the worker thread once it starts
     std::optional<file::Library> library_;
     std::optional<audio::Library> audio_;

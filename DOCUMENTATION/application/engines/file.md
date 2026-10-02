@@ -205,7 +205,7 @@ This replaces the plan of 2026-10-02 to put tag reading on `abhinavp06/FILE_SCAN
   - Windows: `GetVolumeInformationW`
   - macOS: DiskArbitration
 - **Volume arrival:** plugging in a drive triggers resolution and an optional sync of its roots. This is the first need for syncing a single root, and it may become a third `sync` overload then. hoardor exposes `check_roots()`. The trigger can come from hoardor's own platform listener, or from TYLI calling `check_roots()` when the OS reports a device change.
-- **Per-volume scan concurrency** (configurable): 1 for an HDD, more for an SSD, RAID, or NAS. Roots on different volumes scan in parallel. **The user asked for parallel syncing on 2026-10-02.** Proposed as the feature right after Media library v1, covering sync and the metadata pass (`features/media_listing.md` §8).
+- **Per-device concurrency: built 2026-10-02** (on `abhinavp06/MEDIA_LISTING`, at the user's request). `file::device_of` names a path's physical drive, and `master` syncs and reads metadata with one worker per drive, up to `parallel_devices` (default 4). Still open: several workers per SSD/RAID/NAS, and a DiskArbitration backend on macOS.
 - **macOS** mount-point listing (`getmntinfo`).
 
 

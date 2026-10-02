@@ -2,6 +2,48 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Sync and metadata reading run one worker per physical drive (2026-10-02, branch `abhinavp06/MEDIA_LISTING`)
+
+**Summary:** This is the per-drive parallelism the user asked for, and the start of file engine phase 4. Folders on different physical drives now sync and have their metadata read at the same time, one worker per drive, never two on one disk (ARCHITECTURE §6: two readers on a spinning disk thrash its head).
+
+**Added**
+- **`file::device_of(path)`** (`include/hoardor/file/mount_points.hpp`) and `file::DeviceLookup`:
+  - **Linux** (`device_linux.cpp`): the parent block device from `/sys/dev/block/MAJ:MIN`, so two partitions of one disk match. Network shares and FUSE fall back to the device id.
+  - **Windows** (`device_windows.cpp`): the disk number behind the volume (`IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS`), else the volume serial.
+  - **Other systems** (`device_other.cpp`): `st_dev`. On macOS, partitions of one disk count as different drives until a DiskArbitration backend exists.
+- **The `file::Settings::parallel_devices` setting** (default 4, range 1–16; 1 = one drive at a time): persisted and validated.
+- **`SyncWorker`:**
+  - `start(…, device_of)`, injectable for tests
+  - `sync(scope, stop)`: roots grouped by drive, up to `parallel_devices` workers, each with its own connection; reports keep the roots' order, and progress carries the global root index
+  - `read_metadata`: the same split, using `pending(…, root)`
+- **`audio` / `video`:** `pending(category, after, limit, root)` and `pending_count(category, root)` take an optional root.
+- **`tests/tsan.supp`:** SQLite's WAL index is lock-free by design (file locks and memory barriers that ThreadSanitizer can't see). Two writing connections reported races only inside `wal*` functions; those are suppressed, and nothing else is.
+
+**Decisions**
+- **One worker per physical drive, not per folder or per CPU core.**
+  - Offline or unidentifiable roots share one group.
+  - Within a drive, roots run one after another.
+  - SQLite writers take turns: each drive commits short batches, under `busy_timeout`.
+- **No SSD detection yet:** one worker per drive even on SSDs. It's simple and never thrashes. Several workers per SSD could come later if daily use shows a need.
+
+**Tests:** 181 pass.
+- `MetadataPassTest.TwoDrivesSyncAndReadInParallel`: two pretend drives sync on two threads, keep the report order, and read 300 tracks.
+- `MetadataPassTest.OneDriveAtATimeWhenTheSettingSaysSo`
+- Settings round trip and validation for `parallel_devices`.
+- ThreadSanitizer is clean on the worker tests with `tests/tsan.supp`.
+
+**Known limitations**
+- `device_of` on Windows and macOS is compiled in CI but untested on real drives (the VM has one disk). The user's Windows run will tell.
+
+**Files**
+- `include/hoardor/file/{mount_points,settings}.hpp`
+- `src/file/platform/device_{linux,windows,other}.cpp`
+- `src/file/{settings,library}.cpp`
+- `include/hoardor/{audio/audio,video/video}.hpp`, `src/{audio,video}/library.cpp`
+- `include/hoardor/master/sync_worker.hpp`, `src/master/sync_worker.cpp`
+- `CMakeLists.txt`, `CLAUDE.md` (the TSan command)
+- tests and docs
+
 ### Metadata reading split from sync, and 8x faster with embedded covers (2026-10-02, branch `abhinavp06/MEDIA_LISTING`)
 
 **Summary:** The user reported that syncing got slow once metadata reading was added. There were two causes:

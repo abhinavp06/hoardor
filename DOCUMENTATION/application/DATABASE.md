@@ -88,6 +88,7 @@ erDiagram
   - `batch_max_rows`, `batch_max_milliseconds`
   - `progress_interval_files`
   - `relocation_sample_size`, `relocation_min_match_percent`
+  - `parallel_devices`
 - **A missing or unparsable value** falls back to the default in code (`Settings::defaults()`). Saving validates against `file::limits` first.
 
 ### `file_categories`

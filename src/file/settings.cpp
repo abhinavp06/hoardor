@@ -79,6 +79,7 @@ std::vector<std::string> validate(const Settings& s) {
     range("settle window (seconds)", s.settle_window_seconds, limits::settle_window_seconds);
     range("mass-removal threshold (%)", s.mass_removal_threshold_percent, limits::mass_removal_threshold_percent);
     range("batch size (rows)", s.batch_max_rows, limits::batch_max_rows);
+    range("drives at a time", s.parallel_devices, limits::parallel_devices);
     range("batch time (ms)", s.batch_max_milliseconds, limits::batch_max_milliseconds);
     range("progress interval (files)", s.progress_interval_files, limits::progress_interval_files);
     range("relocation sample size", s.relocation_sample_size, limits::relocation_sample_size);
