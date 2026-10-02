@@ -9,6 +9,7 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(hoardor_tests
+    core/text_test.cpp
     db/database_test.cpp
     file/file_time_test.cpp
     file/settings_test.cpp
@@ -16,6 +17,8 @@ add_executable(hoardor_tests
     file/scanner_test.cpp
     file/library_test.cpp
     file/sync_test.cpp
+    file/companions_test.cpp
+    file/migration_test.cpp
     master/sync_worker_test.cpp
 )
 

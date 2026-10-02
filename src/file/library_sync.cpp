@@ -52,7 +52,8 @@ struct Statements {
         auto find = db.prepare("SELECT id, size, mtime_ns, kind, relative_path, unsettled FROM file_entries "
                                "WHERE root_id = ? AND path_key = ?");
         auto insert = db.prepare("INSERT INTO file_entries (root_id, relative_path, path_key, size, mtime_ns, kind, "
-                                 "unsettled, seen_generation, changed_generation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                                 "unsettled, seen_generation, changed_generation, added_ns) "
+                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         auto update_changed = db.prepare("UPDATE file_entries SET relative_path = ?, size = ?, mtime_ns = ?, kind = ?, "
                                          "unsettled = ?, seen_generation = ?, changed_generation = ? WHERE id = ?");
         auto update_seen = db.prepare("UPDATE file_entries SET seen_generation = ?, unsettled = ? WHERE id = ?");
@@ -229,7 +230,8 @@ RootSyncReport Library::sync_one(RootId id, std::stop_token stop, const Progress
                     .bind(6, kind)
                     .bind(7, unsettled ? 1 : 0)
                     .bind(8, generation)
-                    .bind(9, generation);
+                    .bind(9, generation)
+                    .bind(10, now);
                 auto r = st.insert.run();
                 st.insert.reset();
                 if (!r) {

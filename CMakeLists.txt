@@ -37,6 +37,9 @@ option(BUILD_BENCHMARKS "Build Google Benchmark targets (use a Release build)" O
 add_subdirectory(third_party)
 
 add_library(hoardor
+    # CORE (shared infrastructure, built on demand)
+    src/core/text.cpp
+
     # DB ENGINE
     src/db/database.cpp
 
@@ -75,7 +78,7 @@ target_include_directories(hoardor
 )
 
 find_package(Threads REQUIRED)
-target_link_libraries(hoardor PRIVATE hoardor_sqlite3 PUBLIC Threads::Threads)
+target_link_libraries(hoardor PRIVATE hoardor_sqlite3 hoardor_pugixml hoardor_ffmpeg PUBLIC Threads::Threads)
 
 if(MSVC)
     target_compile_options(hoardor PRIVATE /W4 /permissive- /utf-8)

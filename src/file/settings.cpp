@@ -9,12 +9,13 @@ namespace hoardor::file {
 
 namespace {
 
-constexpr std::array<std::pair<FileKind, std::string_view>, 5> kind_names{{
+constexpr std::array<std::pair<FileKind, std::string_view>, 6> kind_names{{
     {FileKind::Audio, "audio"},
     {FileKind::Video, "video"},
     {FileKind::Text, "text"},
     {FileKind::Image, "image"},
     {FileKind::Subtitle, "subtitle"},
+    {FileKind::Info, "info"},
 }};
 
 }
@@ -46,6 +47,7 @@ Settings Settings::defaults() {
     map(FileKind::Text, {"epub", "pdf", "txt", "md", "mobi", "azw3", "cbz", "cbr", "html", "htm"});
     map(FileKind::Image, {"jpg", "jpeg", "png", "webp", "gif", "bmp"});
     map(FileKind::Subtitle, {"srt", "ass", "ssa", "vtt", "sub", "idx"});
+    map(FileKind::Info, {"nfo"});
 
     settings.ignored_names = {
         // Windows

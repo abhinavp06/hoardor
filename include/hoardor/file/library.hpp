@@ -75,6 +75,7 @@ struct Entry {
     FileKind kind{};
     bool unsettled = false;  // probably still being copied; metadata engines skip it
     std::int64_t changed_generation = 0;
+    std::int64_t added_ns = 0;  // when a sync first found it (entries from before v0.2.0: their mtime)
 };
 
 struct ScanErrorRecord {
@@ -176,6 +177,10 @@ public:
                                                std::size_t limit = 500);
     // What the last sync of this root couldn't read (up to `limit`).
     Result<std::vector<ScanErrorRecord>> scan_errors(RootId root, std::size_t limit = 500);
+    // The image, subtitle, and info (.nfo) entries in the same folder as `entry`, and, with
+    // parent_levels > 0, those directly in up to that many parent folders (a show's tvshow.nfo
+    // and poster). Reads SQLite only. Up to `limit` entries, nearest folder first.
+    Result<std::vector<Entry>> companions(EntryId entry, int parent_levels = 0, std::size_t limit = 200);
     // For playback: the file's current absolute path, or RootOffline / FileMissing.
     // Touches the drive (resolves the root), so never call it just to display the library.
     Result<std::filesystem::path> resolve(EntryId entry);

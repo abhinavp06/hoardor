@@ -6,7 +6,7 @@ One tree of the whole repository: every file, namespace, type, function, test, a
 - **Legend:** `ns` namespace · `class` / `struct` / `enum` types · `fn` free function · `.m()` member function · `static` static member · `(private)` not callable from outside the class · `(internal)` lives in `src/`, not part of the public API · `TEST` a GoogleTest case.
 - `DOCUMENTATION/notes/` is the user's personal folder and is left out on purpose.
 
-Last updated: 2026-10-01 (File Sync v1, branch `abhinavp06/FILE_SCANNER_INIT`).
+Last updated: 2026-10-02 (Media library v1 phase 1, branch `abhinavp06/MEDIA_LISTING`).
 
 ```text
 hoardor/
@@ -15,14 +15,19 @@ hoardor/
 ├── .gitignore                                  build*/, output/, IDE folders
 ├── CMakeLists.txt                              root build
 │   ├── options        BUILD_PLAYGROUND, BUILD_TESTS, RUN_TESTS_AFTER_BUILD (ON only when hoardor is the top-level project), BUILD_BENCHMARKS=OFF
-│   ├── target hoardor (static library)         src/db, src/file, src/master; links hoardor_sqlite3 (private), Threads
+│   ├── target hoardor (static library)         src/core, src/db, src/file, src/master; links hoardor_sqlite3, hoardor_pugixml, hoardor_ffmpeg (private), Threads
 │   └── platform sources                        Windows: *_windows.cpp · Linux: file_info_posix + mount_points_linux · other: file_info_posix + mount_points_other
 │
 ├── third_party/
-│   └── CMakeLists.txt                          SQLite 3.46.1 amalgamation via FetchContent (SHA3-256 pinned)
-│       └── target hoardor_sqlite3 (static C)   SQLITE_DQS=0, SQLITE_DEFAULT_MEMSTATUS=0, SQLITE_OMIT_LOAD_EXTENSION
+│   └── CMakeLists.txt                          third-party code
+│       ├── target hoardor_sqlite3 (static C)   SQLite 3.46.1 amalgamation via FetchContent (SHA3-256 pinned); SQLITE_DQS=0, DEFAULT_MEMSTATUS=0, OMIT_LOAD_EXTENSION
+│       ├── target hoardor_pugixml (static)     pugixml 1.14 (MIT, SHA-256 pinned): parses .nfo files
+│       └── target hoardor_ffmpeg (interface)   ffmpeg libavformat/avcodec/avutil (LGPL, shared): pkg-config on Linux/macOS, -DFFMPEG_ROOT on Windows
 │
 ├── include/hoardor/                            PUBLIC API (everything a consumer like TYLI may call)
+│   │
+│   ├── core/                                   ns hoardor::core: shared infrastructure, built on demand (ARCHITECTURE §2)
+│   │   └── page.hpp                            struct Cursor { key, id } (opaque keyset position) · template struct Page<T> { items, optional next }
 │   │
 │   ├── db/
 │   │   └── database.hpp                        ns hoardor::db: SQLite mechanics (engines/db.md)
@@ -53,7 +58,7 @@ hoardor/
 │   │
 │   ├── file/                                   ns hoardor::file: the file engine (engines/file.md, features/file_sync.md)
 │   │   ├── settings.hpp
-│   │   │   ├── enum FileKind : uint8           Audio=1, Video=2, Text=3, Image=4, Subtitle=5 (stored in the DB, never renumber)
+│   │   │   ├── enum FileKind : uint8           Audio=1, Video=2, Text=3, Image=4, Subtitle=5, Info=6 (.nfo) (stored in the DB, never renumber)
 │   │   │   ├── fn to_string(FileKind)          "audio", "video", ...
 │   │   │   ├── fn file_kind_from_string(name)  inverse, ignoring case
 │   │   │   ├── struct Settings                 every tunable of the file engine (plain data, persisted in file_settings)
@@ -94,7 +99,7 @@ hoardor/
 │   │       ├── enum RootStatus                 Unknown=0, Online=1, Offline=2
 │   │       ├── struct Root                     { id, uuid, category_id, name, path, path_in_volume, use_marker,
 │   │       │                                     case_sensitive, status, generation, last_sync_ns, file_count, held_removals }
-│   │       ├── struct Entry                    { id, root_id, relative_path, size, mtime_ns, kind, unsettled, changed_generation }
+│   │       ├── struct Entry                    { id, root_id, relative_path, size, mtime_ns, kind, unsettled, changed_generation, added_ns }
 │   │       ├── struct ScanErrorRecord          { root_id, relative_path, is_directory, message, generation }
 │   │       ├── enum RootSyncOutcome            Synced, Offline, Cancelled, Failed
 │   │       ├── struct RootSyncReport           { root_id, outcome, generation, added, modified, removed, unchanged,
@@ -115,6 +120,7 @@ hoardor/
 │   │           │                .apply_held_removals(id)   applies removals the mass-removal guard held
 │   │           ├── reads ······ .entries(root, after, limit) · .changed_entries(root, generation, after, limit)   paged by id
 │   │           │                .scan_errors(root, limit) · .resolve(entry) -> path | RootOffline | FileMissing   (playback)
+│   │           │                .companions(entry, parent_levels, limit)   images, subtitles, .nfo in its folder (+ parents), nearest first
 │   │           ├── struct Resolution            (private) { online, relocated, reason }
 │   │           ├── .path_in_volume(path)        (private) path relative to its longest containing mount point
 │   │           ├── .check_overlap(path, except) (private) rejects nested / containing roots
@@ -136,6 +142,10 @@ hoardor/
 │                                               queue_ (deque<scope>), running_, current_ (stop_source), thread_ (jthread, last)
 │
 ├── src/                                        IMPLEMENTATION (internal helpers live here, not in include/)
+│   ├── core/
+│   │   └── text.hpp / text.cpp                 ns hoardor::core (internal): sort_key(text, articles) natural + article-free key,
+│   │                                           default_articles(), trim(text), split_values(text, separators)
+│   │
 │   ├── db/
 │   │   └── database.cpp                        Statement, Database, Transaction, migrate
 │   │       └── fn error_from(sqlite3*, rc)     (internal) SQLite error -> db::Error
@@ -166,8 +176,8 @@ hoardor/
 │   │   │   ├── fn root_columns() / read_root(Statement)     SELECT list + row -> Root
 │   │   │   ├── fn entry_columns() / read_entry(Statement)   SELECT list + row -> Entry
 │   │   │   └── fn set_root_status(Database&, id, RootStatus)
-│   │   ├── library.cpp                         Library: open, settings, categories, roots, relocation, entries, resolve
-│   │   │   ├── schema_v1 / migrations          (internal) file migration 1 (tables + seeded categories)
+│   │   ├── library.cpp                         Library: open, settings, categories, roots, relocation, entries, resolve, companions
+│   │   │   ├── schema_v1 / schema_v2 / migrations   (internal) file migrations 1 (tables + seeded categories) and 2 (added_ns, .nfo kind)
 │   │   │   ├── join_lines, split_lines, parse_int<Int>(text, out, min, max)   (internal) settings text format
 │   │   │   ├── serialize(Settings) / apply(Settings&, key, value)              (internal) Settings <-> file_settings rows
 │   │   │   ├── kinds_text(kinds) / parse_kinds(text)                           (internal) "audio,image" <-> kinds
@@ -193,12 +203,15 @@ hoardor/
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 116 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 132 tests, run by ctest)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target
 │   ├── support/
 │   │   ├── temp_dir.hpp                        ns hoardor::test: class TempDir (unique temp folder; .path(), .write(relative, size)); fn u8path(utf8)
 │   │   └── library_fixture.hpp                 class LibraryTest : Test (in-memory DB + Library + injectable mounts);
 │   │                                           .category(name), .all_entries(root), .set_settings(edit)
+│   ├── core/
+│   │   └── text_test.cpp                       6 TESTs: SortKey.{NumbersSortNaturally, LeadingZerosDontMatter, AVeryLongNumberStillSorts,
+│   │                                           CaseAndArticlesAreIgnored, NumbersBeforeLetters_UnicodeKept}, SplitValues.SeparatorsTrimmingAndDuplicates
 │   ├── db/
 │   │   └── database_test.cpp                   12 TESTs
 │   │       ├── Database.*                      OpensInMemoryWithForeignKeysOn, OpensFileInWalMode, OpenFailsForImpossiblePath, ReportsSqlErrors
@@ -239,8 +252,12 @@ hoardor/
 │   │   │   │                                   RootWithoutMarkerWritesNothing, ReadOnlyFolderFallsBackToNoMarker,
 │   │   │   │                                   RootCategoryCanChangeButOnlyToAnExistingOne, RemoveRootKeepsItsMarkerOnDisk
 │   │   │   └── RootMarker.RejectsMalformedFiles
-│   │   └── sync_test.cpp                       29 TESTs (class SyncTest : LibraryTest; .put(relative, size, mtime), .add_music(use_marker), .music(), .paths(root))
-│   │       ├── basics                          FirstSyncAddsMediaOfTheCategoryKindsOnly, SecondSyncChangesNothing,
+│   │   ├── companions_test.cpp                 5 TESTs (class CompanionsTest): ImagesNextToATrackButNotInOtherFolders,
+│   │   │                                       AVideosNfoSubtitlesAndTheShowsFilesTwoLevelsUp, FilesDirectlyInTheRoot, CaseInsensitiveRootsAndTheLimit, UnknownEntry
+│   │   ├── migration_test.cpp                  4 TESTs: FileMigration.{AV010LibraryKeepsItsEntriesAndGetsAddedTimes, VideoCategoriesGainInfoOnce,
+│   │   │                                       SavedExtensionMapGainsNfo, AUserMappingOfNfoIsKept}
+│   │   └── sync_test.cpp                       30 TESTs (class SyncTest : LibraryTest; .put(relative, size, mtime), .add_music(use_marker), .music(), .paths(root))
+│   │       ├── basics                          FirstSyncAddsMediaOfTheCategoryKindsOnly, AddedTimeIsSetOnceAndSurvivesChanges, SecondSyncChangesNothing,
 │   │       │                                   SizeOrMtimeChangesAreModificationsAndKeepTheId, DeletedFilesAreRemovedBelowTheGuard
 │   │       ├── guard                           MassRemovalIsHeldUntilConfirmed, MassRemovalThresholdIsASetting
 │   │       ├── drives                          MissingRootIsOfflineAndKeepsEverything, DifferentDriveAtTheOldPathIsNotScanned,

@@ -67,6 +67,11 @@ DOCUMENTATION/
 
 ## Build and test
 
+hoardor needs ffmpeg's development files (metadata reading):
+- **Linux:** `apt install libavformat-dev libavcodec-dev libavutil-dev ffmpeg`. The `ffmpeg` command-line tool generates test media; tests that need it skip without it.
+- **macOS:** `brew install ffmpeg`.
+- **Windows:** a shared LGPL build (e.g. BtbN's `win64-lgpl-shared`), passed with `-DFFMPEG_ROOT=<folder with include/ lib/ bin/>`, its `bin` on `PATH`.
+
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j

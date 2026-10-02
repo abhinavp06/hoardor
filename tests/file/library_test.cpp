@@ -22,8 +22,11 @@ TEST_F(LibraryTest, SeedsDefaultCategories) {
     EXPECT_EQ(categories[0].name, "Music");
     EXPECT_EQ(categories[0].kinds, (std::vector<FileKind>{FileKind::Audio, FileKind::Image}));
     EXPECT_EQ(categories[1].name, "Movies");
-    EXPECT_EQ(categories[1].kinds, (std::vector<FileKind>{FileKind::Video, FileKind::Subtitle, FileKind::Image}));
+    // Migration 2 adds .nfo descriptions to the video categories.
+    EXPECT_EQ(categories[1].kinds,
+              (std::vector<FileKind>{FileKind::Video, FileKind::Subtitle, FileKind::Image, FileKind::Info}));
     EXPECT_EQ(categories[2].name, "Shows");
+    EXPECT_EQ(categories[2].kinds, categories[1].kinds);
     EXPECT_EQ(categories[3].name, "Books");
     EXPECT_EQ(categories[3].kinds, (std::vector<FileKind>{FileKind::Text, FileKind::Image}));
 }

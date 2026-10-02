@@ -5,7 +5,7 @@ The one place that describes **every table in hoardor's SQLite database**: what 
 - **Mechanics** (connections, pragmas, statements, transactions, the migration runner) are in `engines/db.md`.
 - **Why one database, and who owns which tables:** `ARCHITECTURE.md` §3.
 
-Status: matches the code shipped in **`v0.1.0`** (file engine migration 1). The changes proposed by `features/media_listing.md` are listed in §5 until they're built.
+Status: `v0.1.0` (file migration 1), plus file migration 2 built on `abhinavp06/MEDIA_LISTING` (Media library v1, phase 1). The rest of `features/media_listing.md` is listed in §5 until it's built.
 
 ## 1. Rules
 
@@ -88,8 +88,8 @@ erDiagram
 
 Seeded by migration 1, all editable and deletable:
 - Music: `audio,image`
-- Movies: `video,subtitle,image`
-- Shows: `video,subtitle,image`
+- Movies: `video,subtitle,image`, plus `info` since migration 2
+- Shows: `video,subtitle,image`, plus `info` since migration 2
 - Books: `text,image`
 
 A category with roots can't be deleted (`InUse`).
@@ -122,13 +122,16 @@ A category with roots can't be deleted (`InUse`).
 | `path_key` | TEXT | `relative_path`, ASCII-lowercased on case-insensitive roots; with `root_id` the identity |
 | `size` | INTEGER | bytes |
 | `mtime_ns` | INTEGER | modification time |
-| `kind` | INTEGER | `FileKind`: 1 audio, 2 video, 3 text, 4 image, 5 subtitle |
+| `kind` | INTEGER | `FileKind`: 1 audio, 2 video, 3 text, 4 image, 5 subtitle, 6 info (`.nfo`) |
 | `unsettled` | INTEGER | 1 if modified within the settle window (probably still copying); metadata engines skip it |
 | `seen_generation` | INTEGER | the last sync that saw it (mark and sweep: older rows are removed files) |
 | `changed_generation` | INTEGER | the last sync that added or changed it |
+| `added_ns` | INTEGER | when a sync first inserted it (the sync's start time); never changed by modifications. Entries from before migration 2 got their `mtime_ns` (file migration 2) |
 
 - `UNIQUE (root_id, path_key)`: the sync's lookup, and its fast path for unchanged files.
 - `INDEX file_entries_changed (root_id, changed_generation, id)`: `changed_entries`, where consumers page what one sync added or changed.
+- `INDEX file_entries_added (added_ns, id)`: "added" ordering for the audio and video queries.
+- `companions(entry)`: range scan of `(root_id, path_key)` over the folder's prefix, so it needs no extra index.
 - `entries(root, after, limit)` pages by `(root_id, id)` through the rowid.
 
 ### `file_scan_errors`
@@ -148,15 +151,13 @@ A category with roots can't be deleted (`InUse`).
 | Component | Version | Shipped in | Change |
 |---|---|---|---|
 | `file` | 1 | `v0.1.0` | All `file_*` tables above and the four seeded categories |
+| `file` | 2 | (v0.2.0, Media library v1) | `file_entries.added_ns` (backfilled from `mtime_ns`) and its index; `info` added to the Movies and Shows categories; `nfo=info` appended to a saved extension map that doesn't map `.nfo` yet |
 
 ## 5. Proposed (not built)
 
 These changes stay here until they're built, then move into §2–§4.
 
 - **`features/media_listing.md` §6** (Media library v1, draft v2, awaiting approval):
-  - **`file` migration 2:**
-    - `file_entries.added_ns`, plus an index `(added_ns, id)`; existing rows are backfilled from `mtime_ns`
-    - `FileKind::Info = 6` for `.nfo`, added to the default Movies and Shows categories
   - **`audio` migration 1:**
     - `audio_tracks`: one row per audio entry, holding tags, stream info, sort keys, and the source size and mtime that detect stale rows
     - `audio_names`: each artist or genre once

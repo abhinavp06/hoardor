@@ -17,6 +17,7 @@ enum class FileKind : std::uint8_t {
     Text = 3,
     Image = 4,
     Subtitle = 5,
+    Info = 6,  // sidecar descriptions (.nfo): companions of a video, read for its metadata
 };
 
 std::string_view to_string(FileKind kind);

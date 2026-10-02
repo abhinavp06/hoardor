@@ -47,7 +47,7 @@ Root read_root(const db::Statement& st) {
 }
 
 std::string_view entry_columns() {
-    return "id, root_id, relative_path, size, mtime_ns, kind, unsettled, changed_generation";
+    return "id, root_id, relative_path, size, mtime_ns, kind, unsettled, changed_generation, added_ns";
 }
 
 Entry read_entry(const db::Statement& st) {
@@ -60,6 +60,7 @@ Entry read_entry(const db::Statement& st) {
     e.kind = static_cast<FileKind>(st.column_int64(5));
     e.unsettled = st.column_int64(6) != 0;
     e.changed_generation = st.column_int64(7);
+    e.added_ns = st.column_int64(8);
     return e;
 }
 
@@ -130,7 +131,19 @@ INSERT INTO file_categories (name, kinds) VALUES
     ('Books', 'text,image');
 )sql";
 
-constexpr std::array<db::Migration, 1> migrations{{{1, schema_v1}}};
+// Media library v1 (features/media_listing.md §6): when each entry was first found, and the
+// .nfo kind. Entries from before have no real "added" time; their mtime is the closest guess.
+constexpr std::string_view schema_v2 = R"sql(
+ALTER TABLE file_entries ADD COLUMN added_ns INTEGER NOT NULL DEFAULT 0;
+UPDATE file_entries SET added_ns = mtime_ns;
+CREATE INDEX file_entries_added ON file_entries (added_ns, id);
+UPDATE file_categories SET kinds = kinds || ',info'
+    WHERE name IN ('Movies', 'Shows') AND (',' || kinds || ',') NOT LIKE '%,info,%';
+UPDATE file_settings SET value = value || char(10) || 'nfo=info'
+    WHERE key = 'extension_kinds' AND value <> '' AND (char(10) || value) NOT LIKE '%' || char(10) || 'nfo=%';
+)sql";
+
+constexpr std::array<db::Migration, 2> migrations{{{1, schema_v1}, {2, schema_v2}}};
 
 // ---------------------------------------------------------------- Settings (de)serialization
 
@@ -677,6 +690,56 @@ Result<fs::path> Library::resolve(EntryId entry_id) {
         return std::unexpected(Error{ErrorCode::FileMissing, "the file is no longer in its folder"});
     }
     return full;
+}
+
+}
+
+namespace hoardor::file {
+
+Result<std::vector<Entry>> Library::companions(EntryId entry_id, int parent_levels, std::size_t limit) {
+    auto st = db_->prepare("SELECT root_id, path_key FROM file_entries WHERE id = ?");
+    if (!st) return std::unexpected(database_error(st.error()));
+    st->bind(1, entry_id);
+    auto row = st->step();
+    if (!row) return std::unexpected(database_error(row.error()));
+    if (!*row) return std::unexpected(Error{ErrorCode::NotFound, "no such file"});
+    const RootId root_id = st->column_int64(0);
+    std::string folder = st->column_text(1);  // its key; trimmed to the folder below
+
+    // Entries directly in one folder: keys in [folder/, folder0) with no further '/'
+    // ('/' is 0x2F and '0' is 0x30, the same trick as the sync's subtree touch).
+    auto in_folder = db_->prepare("SELECT " + std::string(detail::entry_columns()) +
+                                  " FROM file_entries WHERE root_id = ? AND path_key >= ? AND path_key < ? "
+                                  "AND instr(substr(path_key, ?), '/') = 0 AND kind IN (?, ?, ?) AND id <> ? "
+                                  "ORDER BY path_key LIMIT ?");
+    if (!in_folder) return std::unexpected(database_error(in_folder.error()));
+
+    std::vector<Entry> out;
+    for (int level = 0; level <= parent_levels && out.size() < limit; ++level) {
+        const auto slash = folder.rfind('/');
+        const bool at_root = slash == std::string::npos;
+        folder = at_root ? std::string() : folder.substr(0, slash);
+        const std::string prefix = at_root ? std::string() : folder + "/";
+        const std::string upper = at_root ? std::string("\xF4\x90") : folder + "0";  // above any UTF-8 key
+        in_folder->bind(1, root_id)
+            .bind(2, std::string_view(prefix))
+            .bind(3, std::string_view(upper))
+            .bind(4, static_cast<std::int64_t>(prefix.size() + 1))
+            .bind(5, static_cast<std::int64_t>(FileKind::Image))
+            .bind(6, static_cast<std::int64_t>(FileKind::Subtitle))
+            .bind(7, static_cast<std::int64_t>(FileKind::Info))
+            .bind(8, entry_id)
+            .bind(9, static_cast<std::int64_t>(limit - out.size()));
+        while (true) {
+            auto next = in_folder->step();
+            if (!next) return std::unexpected(database_error(next.error()));
+            if (!*next) break;
+            out.push_back(detail::read_entry(*in_folder));
+        }
+        in_folder->reset();
+        if (at_root) break;
+    }
+    return out;
 }
 
 }

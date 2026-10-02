@@ -153,6 +153,12 @@ As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANN
 | `progress_interval_files` | `500` |
 | `relocation_sample_size` / `relocation_min_match_percent` | `20` / `80` |
 
+**Media library v1, phase 1 (branch `abhinavp06/MEDIA_LISTING`):**
+- `Entry::added_ns`: set when a sync first inserts an entry (file migration 2).
+- `FileKind::Info` for `.nfo`.
+- `Library::companions(entry, parent_levels, limit)`.
+- Schema details: `DATABASE.md`.
+
 ## 4. Roadmap
 
 | Phase | Scope | Delivered by |
