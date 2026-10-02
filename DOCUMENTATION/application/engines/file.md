@@ -1,6 +1,6 @@
 # File engine (`hoardor::file`)
 
-Status: **Proposed**. It becomes Decided with the user's approval of `features/file_sync.md`, and is updated to match the code when that feature ships.
+Status: **Decided** (with the approval of `features/file_sync.md`, 2026-10-01). §3 "Current state" matches the code shipped in `v0.1.0` (File Sync v1).
 
 This is the long-lived reference for the file engine: what it owns, the storage model it's built on, its current public API and tables, and its roadmap. Each feature that changes the engine has its own doc in `features/`.
 
@@ -166,6 +166,13 @@ As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANN
 ### 4.0 Next feature: Media listing (approved proposals, not designed in detail yet)
 
 The user approved these proposals on 2026-10-01. The detailed design goes in `features/media_listing.md` on a new branch, after File Sync v1 merges. TYLI's tabs list a category's media across all of its folders.
+
+**Order of work (the user, 2026-10-02):** every media type gets a basic form first, then playback, then metadata:
+1. **Media listing** (this section): every category browsable from file and folder names, with no tags yet.
+2. **Player, first draft:** audio and video playback (books get a reader later). Where decoding lives (hoardor with ffmpeg, or Qt's media player for a first draft) is decided in its design.
+3. **Metadata:** tags, cover art, and chapters, built on the player's decoder where possible, so a separate tag library (e.g. TagLib) may not be needed. Analysis features such as Skip Intro (finding the audio that repeats across episodes) come after that.
+
+This replaces the plan of 2026-10-02 to put tag reading on `abhinavp06/FILE_SCANNER_INIT`.
 
 - **Listed kinds per category:** a new category setting next to the accepted kinds. Music lists audio; Movies and Shows list video; Books lists text. Cover images and subtitles are companions of a file, not list items.
 - **Rows** show file facts until tag reading exists: name, folder, size, modified date, kind, which root it belongs to, and whether that root is online. The API is shaped so artist, album, and title can be added later.

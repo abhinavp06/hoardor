@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Built, awaiting the user's code review**: approved on 2026-10-01, phases 1 and 2 implemented on 2026-10-01. Becomes **Shipped (`v0.1.0`)** when the PR merges |
+| Status | **Shipped in `v0.1.0`** (2026-10-02): approved on 2026-10-01, phases 1 and 2 built on 2026-10-01, first built with MSVC and tested by the user on Windows on 2026-10-02. It lands on `master` with the PR from `abhinavp06/FILE_SCANNER_INIT`; the user's code review happens in that PR |
 | Branch | `abhinavp06/FILE_SCANNER_INIT` (one PR) |
 | Ships in | `v0.1.0` |
 | Engines involved | `file` (scanner, roots, reconciliation), `db` (SQLite mechanics, phase 2), `master` (background sync worker, phase 2) |
