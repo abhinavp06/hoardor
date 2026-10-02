@@ -152,7 +152,7 @@ hoardor/
 │   │   │   ├── fn from_utf8(text) -> path      UTF-8 text -> path on every OS
 │   │   │   ├── fn utf8_from_utf16(u16string_view) / utf8_from_bytes(string_view)   the two conversions, testable anywhere
 │   │   │   └── append_code_point, is_space, replacement_character   (internal helpers)
-│   │   ├── file_time.hpp                       ns detail (internal): to_unix_ns(file_time_type), from_unix_ns(ns): exact, via clock_cast
+│   │   ├── file_time.hpp                       ns detail (internal): to_unix_ns(file_time_type), from_unix_ns(ns): exact, via clock_cast (floored to the file clock's tick: 100 ns on MSVC)
 │   │   ├── root_marker.hpp / root_marker.cpp   ns detail (internal): the .hoardor-root file
 │   │   │   ├── marker_file_name                ".hoardor-root"
 │   │   │   ├── fn new_uuid()                   random v4 UUID
@@ -193,7 +193,7 @@ hoardor/
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 113 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 116 tests, run by ctest)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target
 │   ├── support/
 │   │   ├── temp_dir.hpp                        ns hoardor::test: class TempDir (unique temp folder; .path(), .write(relative, size)); fn u8path(utf8)
@@ -207,6 +207,8 @@ hoardor/
 │   │       ├── Migrate.*                       AppliesEachVersionOncePerComponent, FailedMigrationRollsBackAndKeepsVersion
 │   │       └── Wal.*                           ReaderSeesCommittedDataWhileAnotherConnectionWrites
 │   ├── file/
+│   │   ├── file_time_test.cpp                  3 TESTs
+│   │   │   └── FileTime.*                      RoundTripIsExactOnTheClocksTick, FinerThanTheTickRoundsDown, AFilesModificationTimeComesBackUnchanged
 │   │   ├── settings_test.cpp                   13 TESTs
 │   │   │   ├── SettingsDefaults.*              CoverEveryKind, IgnoreListsHoldExternalDriveLitter
 │   │   │   ├── KindOf.*                        IgnoresExtensionCase, AcceptsUserKeysWithDotOrUppercase, RespectsEditedMap,

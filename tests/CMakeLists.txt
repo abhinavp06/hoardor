@@ -10,6 +10,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(hoardor_tests
     db/database_test.cpp
+    file/file_time_test.cpp
     file/settings_test.cpp
     file/text_test.cpp
     file/scanner_test.cpp

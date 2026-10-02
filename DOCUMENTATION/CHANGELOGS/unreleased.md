@@ -2,6 +2,28 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Fix: `from_unix_ns` didn't compile with MSVC (2026-10-02, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:** The first Windows build (TYLI's GitHub Actions workflow, which builds hoardor from this repo's branch) stopped at `src/file/file_time.hpp`: `error C2440: 'return': cannot convert from time_point<file_clock, nanoseconds> to time_point<_File_time_clock, 100 ns>`. `std::filesystem::file_time_type` ticks in 1 ns with libstdc++ but in 100 ns with MSVC. `clock_cast` from a nanosecond `sys_time` gives a nanosecond time point, and C++ refuses to narrow it implicitly to MSVC's coarser `file_time_type`. On Linux the types are the same, so it never showed. This was hoardor's first compile under MSVC (CI is deferred).
+
+**Changed**
+- `src/file/file_time.hpp`: `from_unix_ns` floors to `file_time_type::duration` (`std::chrono::floor`). On Linux it changes nothing. On Windows it drops the sub-100 ns digits, which NTFS can't store anyway. `floor` rather than `time_point_cast`, so a time before 1970 rounds down, not toward zero.
+
+**Added**
+- `tests/file/file_time_test.cpp` (3 tests, written to pass on both platforms whatever the tick):
+  - `FileTime.RoundTripIsExactOnTheClocksTick`: multiples of 100 ns, including 1970 and before, come back unchanged.
+  - `FileTime.FinerThanTheTickRoundsDown`: 150 ns stays 150 on Linux and becomes 100 on Windows: never rounded up, never off by a whole tick.
+  - `FileTime.AFilesModificationTimeComesBackUnchanged`: set a real file's mtime, read it back.
+
+**Files**
+- `src/file/file_time.hpp`, `tests/file/file_time_test.cpp`, `tests/CMakeLists.txt`, `DOCUMENTATION/application/CODE_TREE.md` and `.html`.
+
+**Tests**
+- 116 in total, 3 new; all pass on Linux. The Windows run comes from TYLI's workflow.
+
+**Known limitations / follow-ups**
+- More MSVC-only problems may show in the next Windows run (the rest of hoardor has never been compiled with MSVC).
+
 ### Settings validation before saving (2026-10-01, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:**
