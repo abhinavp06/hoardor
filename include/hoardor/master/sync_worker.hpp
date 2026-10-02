@@ -19,8 +19,9 @@ namespace hoardor::master {
 
 // Reading metadata after a sync (features/media_listing.md §4.1).
 struct MetadataProgress {
-    std::uint64_t done = 0;   // files read (or failed) so far in this pass
-    std::uint64_t total = 0;  // files that needed reading when the pass started
+    std::uint64_t done = 0;        // files read (or failed) so far in this pass
+    std::uint64_t total = 0;       // files that needed reading when the pass started
+    std::int64_t elapsed_ms = 0;   // since the pass started (done / elapsed = files per second)
 };
 
 struct MetadataReport {
@@ -28,6 +29,7 @@ struct MetadataReport {
     std::uint64_t failed = 0;   // unreadable: recorded, not retried until the file changes
     std::uint64_t skipped = 0;  // gone or its drive went away: left for a later pass
     bool cancelled = false;
+    std::int64_t elapsed_ms = 0;
 };
 
 struct SyncCallbacks {
@@ -36,15 +38,17 @@ struct SyncCallbacks {
     std::function<void(const file::SyncProgress&)> on_progress;
     // The scope that was synced (std::nullopt = everything) and its report.
     std::function<void(std::optional<file::CategoryId>, const file::SyncReport&)> on_finished;
-    // After on_finished, the same scope's audio and video files that are new, changed, or never
-    // read are read while the drives are awake. Same thread rules as above.
+    // After a sync, reading the same scope's new, changed, or never-read audio and video files
+    // is queued as its own job (it runs while the drives are awake, after any queued sync, and
+    // a new sync request pauses it). Same thread rules as above. A paused pass resumes later
+    // without an on_metadata_finished in between.
     std::function<void(const MetadataProgress&)> on_metadata_progress;
     std::function<void(std::optional<file::CategoryId>, const MetadataReport&)> on_metadata_finished;
 };
 
 // Runs file::Library::sync() on a background thread that hoardor owns
-// (features/file_sync.md §4.10, engines/master.md), then reads the metadata of what the
-// sync found (audio and video engines).
+// (features/file_sync.md §4.10, engines/master.md), and reading metadata (audio and video
+// engines) as a separate, lower-priority job: a sync is never kept waiting by it.
 class SyncWorker {
 public:
     // Opens its own connection to `database_file` and starts the thread. If the stored
@@ -58,17 +62,26 @@ public:
     SyncWorker(const SyncWorker&) = delete;
     SyncWorker& operator=(const SyncWorker&) = delete;
 
-    // Queues a sync of one category, or of everything (std::nullopt). Returns false
-    // and does nothing if the same scope is already queued or running.
+    // Queues a sync of one category, or of everything (std::nullopt), ahead of any metadata
+    // job; a running metadata job is paused for it. Returns false and does nothing if the
+    // same scope's sync is already queued or running.
     bool request_sync(std::optional<file::CategoryId> category = std::nullopt);
-    // Cancels the running sync (it removes nothing) and clears the queue.
+    // Cancels the running job (a sync removes nothing; a pass keeps what it read) and clears the queue.
     void cancel();
-    bool idle() const;
+    bool idle() const;     // nothing queued or running
+    bool syncing() const;  // a sync is queued or running
+    bool reading() const;  // a metadata job is queued or running
     // Blocks until nothing is queued or running.
     void wait_idle();
 
 private:
     using Scope = std::optional<file::CategoryId>;
+    enum class Kind { Sync, Metadata };
+    struct Job {
+        Kind kind;
+        Scope scope;
+        bool operator==(const Job&) const = default;
+    };
 
     SyncWorker(db::Database database, SyncCallbacks callbacks) : database_(std::move(database)), callbacks_(std::move(callbacks)) {}
     void run(std::stop_token stop);
@@ -82,9 +95,10 @@ private:
 
     mutable std::mutex mutex_;
     std::condition_variable_any changed_;
-    std::deque<Scope> queue_;
-    std::optional<Scope> running_;
-    std::stop_source current_;  // stops the running sync
+    std::deque<Job> queue_;           // syncs first, then metadata jobs
+    std::optional<Job> running_;
+    std::stop_source current_;        // stops the running job
+    bool paused_ = false;             // the running metadata job was stopped for a sync: queue it again
 
     std::jthread thread_;  // last: destroyed (stopped and joined) before everything it uses
 };

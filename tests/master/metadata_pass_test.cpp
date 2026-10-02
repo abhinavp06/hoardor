@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <fstream>
 #include <mutex>
 
@@ -180,4 +181,46 @@ TEST_F(MetadataPassTest, CancelStopsThePassAndTheRestWaits) {
         EXPECT_GT(tracks->pending_count(std::nullopt).value(), 0u);
     }
     EXPECT_EQ(tracks->count({}).value() + tracks->pending_count(std::nullopt).value(), 301u);
+}
+
+TEST_F(MetadataPassTest, ASyncRequestPausesThePassWhichThenResumes) {
+    HOARDOR_SKIP_WITHOUT_FFMPEG();
+    const fs::path music = dir.path() / "Music";
+    ASSERT_TRUE(test::make_media(music / "a.flac", {}));
+    for (int i = 0; i < 400; ++i) fs::copy_file(music / "a.flac", music / ("c" + std::to_string(i) + ".flac"));
+    settle(music);
+    ASSERT_TRUE(library->add_root(category("Music"), music, "Music", false));
+
+    std::mutex m;
+    std::vector<master::MetadataReport> reports;
+    std::atomic<int> syncs{0};
+    std::atomic<bool> asked{false};
+    std::unique_ptr<master::SyncWorker> worker;
+    auto started = master::SyncWorker::start(
+        dir.path() / "library.db",
+        {.on_progress = {},
+         .on_finished = [&](auto, const file::SyncReport&) { ++syncs; },
+         .on_metadata_progress = [&](const master::MetadataProgress& p) {
+             // Mid-pass, ask for another sync: it runs first, then the pass continues.
+             if (p.done > 0 && p.done < p.total && !asked.exchange(true)) {
+                 EXPECT_TRUE(worker->request_sync());
+                 EXPECT_TRUE(worker->syncing());
+                 EXPECT_TRUE(worker->reading());
+             }
+         },
+         .on_metadata_finished = [&](auto, const master::MetadataReport& r) { std::lock_guard l(m); reports.push_back(r); }},
+        no_mounts());
+    ASSERT_TRUE(started.has_value());
+    worker = std::move(*started);
+    worker->request_sync();
+    worker->wait_idle();
+    EXPECT_FALSE(worker->syncing());
+    EXPECT_FALSE(worker->reading());
+    std::lock_guard l(m);
+    ASSERT_EQ(reports.size(), 1u);  // the paused pass reports once, when it's really done
+    EXPECT_FALSE(reports[0].cancelled);
+    EXPECT_GT(reports[0].elapsed_ms, 0);
+    EXPECT_EQ(tracks->count({}).value(), 401u);
+    EXPECT_EQ(syncs.load(), asked ? 2 : 1);  // a fast machine may finish before the first progress report
+    RecordProperty("paused", asked ? "yes" : "no");
 }

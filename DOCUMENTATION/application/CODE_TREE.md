@@ -167,20 +167,21 @@ hoardor/
 │   │
 │   └── master/
 │       └── sync_worker.hpp                     ns hoardor::master: background execution (engines/master.md)
-│           ├── struct MetadataProgress         { done, total }
-│           ├── struct MetadataReport           { read, failed, skipped, cancelled }
+│           ├── struct MetadataProgress         { done, total, elapsed_ms }
+│           ├── struct MetadataReport           { read, failed, skipped, cancelled, elapsed_ms }
 │           ├── struct SyncCallbacks            { on_progress, on_finished, on_metadata_progress, on_metadata_finished }: run on the worker thread
 │           └── class SyncWorker                hoardor-owned background sync thread
 │               ├── static start(db_file, SyncCallbacks, MountPointLister) -> Result<unique_ptr<SyncWorker>>   own connection; queues a startup sync if enabled
 │               ├── ~SyncWorker()               cancels, then the jthread stops and joins
-│               ├── .request_sync(optional category) -> bool   false if that scope is already queued or running
+│               ├── .request_sync(optional category) -> bool   ahead of metadata jobs (pauses a running one); false if that scope's sync is queued or running
 │               ├── .cancel()                   stops the running sync (removes nothing) and clears the queue
-│               ├── .idle() / .wait_idle()
+│               ├── .idle() / .wait_idle() / .syncing() / .reading()
 │               ├── SyncWorker(Database, SyncCallbacks)   (private)
-│               ├── .run(stop_token)            (private) the worker loop: wait for a scope, run Library::sync, report, read metadata
+│               ├── enum Kind (Sync, Metadata) · struct Job { kind, scope }   (private) the queue's jobs; syncs first
+│               ├── .run(stop_token)            (private) the worker loop: a sync (then queue its metadata job), or a metadata job (requeued if paused)
 │               ├── .read_metadata(scope, stop) (private) audio then video pending entries: read, store in short batches, skip gone files
 │               └── members                     database_, library_, audio_, video_, callbacks_, mutex_, changed_ (condition_variable_any),
-│                                               queue_ (deque<scope>), running_, current_ (stop_source), thread_ (jthread, last)
+│                                               queue_ (deque<Job>), running_, current_ (stop_source), paused_, thread_ (jthread, last)
 │
 ├── src/                                        IMPLEMENTATION (internal helpers live here, not in include/)
 │   ├── core/
@@ -265,7 +266,7 @@ hoardor/
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 178 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 179 tests, run by ctest)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
 │   ├── support/
@@ -354,7 +355,7 @@ hoardor/
 │   │       └── playback + relocation           ResolveForPlayback, ManualRelocationWithMarker, ManualRelocationRefusesAnotherRootsFolder,
 │   │                                           ManualRelocationWithoutMarkerChecksASample, UnreadableSubfolderKeepsItsEntries
 │   └── master/
-│       ├── metadata_pass_test.cpp              4 TESTs (MetadataPassTest, real files): ReadsAudioAfterASyncAndOnlyChangesNextTime,
+│       ├── metadata_pass_test.cpp              5 TESTs (MetadataPassTest, real files): ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
 │       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, CancelStopsThePassAndTheRestWaits
 │       └── sync_worker_test.cpp                8 TESTs (class SyncWorkerTest: a real DB file + .music(), .add_music_root(n), .set_settings(edit))
 │           └── SyncWorkerTest.*                RunsARequestedSyncInTheBackground, DuplicateRequestsAreIgnored,
@@ -377,7 +378,9 @@ hoardor/
 │                                               BM_FirstSync (all inserts), BM_IncrementalSync (nothing changed)
 │
 ├── playground/                                 manual experiments against real drives
-│   ├── CMakeLists.txt                          targets hoardor_scan, hoardor_sync
+│   ├── CMakeLists.txt                          targets hoardor_scan, hoardor_sync, hoardor_read
+│   ├── media/
+│   │   └── read_playground.cpp                 main: hoardor_read <folder>: reads every audio/video file's metadata; files/s, bytes read (Linux)
 │   └── file/
 │       ├── scan_playground.cpp                 main: hoardor_scan <folder>: progress, counts by kind, errors, time
 │       └── sync_playground.cpp                 main: hoardor_sync <db> <category> <folder>: adds the root once, syncs, prints the report

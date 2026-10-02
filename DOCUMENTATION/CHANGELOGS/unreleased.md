@@ -2,6 +2,44 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Metadata reading split from sync, and 8x faster with embedded covers (2026-10-02, branch `abhinavp06/MEDIA_LISTING`)
+
+**Summary:** The user reported that syncing got slow once metadata reading was added. There were two causes:
+- **Reading ran inside the sync.** The sync didn't finish, and a new sync waited, until every file was read.
+- **Embedded covers were decoded.** ffmpeg's stream probe, which FLAC always needs because its header leaves the sample rate unknown, decoded each embedded cover picture to learn its pixel format. With a 3 MB PNG cover that meant 20 files per second instead of 1,700.
+
+**Changed**
+- **`master::SyncWorker` runs two kinds of job.**
+  - A sync, as before, then **metadata reading as its own job**, queued after the sync (one per scope; a pass over everything covers a category's).
+  - Syncs always go ahead of metadata jobs. A sync request **pauses** a running pass, which goes back in the queue and resumes after the sync with no `on_metadata_finished` in between.
+  - New `syncing()` and `reading()`.
+  - `MetadataProgress` and `MetadataReport` gain `elapsed_ms`.
+- **`src/media/ffmpeg.cpp`:** before the probe, cover-picture streams get a placeholder pixel format, so ffmpeg doesn't decode them. `embedded_cover()` still returns the encoded bytes, untouched.
+
+**Added**
+- `playground/media/read_playground.cpp` (`hoardor_read <folder>`): metadata reading speed (files/s and, on Linux, bytes read) on a real drive.
+- `MetadataPassTest.ASyncRequestPausesThePassWhichThenResumes`: it records `paused=yes` in the test report when the pause path ran.
+
+**Measured** (this VM, warm cache, 100 FLACs of 20 s; `hoardor_read`):
+
+| Set | Before | After |
+|---|---|---|
+| No cover | 1,395 files/s, 33 KB read per file | 1,733 files/s |
+| 3 MB PNG cover | 20 files/s, 3.1 MB per file | **159 files/s**, 3.1 MB per file |
+
+- **What's left is reading the picture itself:** ffmpeg's FLAC reader loads it in full. On an HDD that's about 20 ms per file on top of the seek.
+- **Ways out:**
+  - parallel reading across drives (file engine phase 4, next)
+  - an own minimal FLAC/ID3 header reader, if it's still the bottleneck after measuring on the user's drives (rejected for now: that's tag parsing hoardor would own)
+
+**Files**
+- `include/hoardor/master/sync_worker.hpp`, `src/master/sync_worker.cpp`, `src/media/ffmpeg.cpp`
+- `playground/CMakeLists.txt`, `playground/media/read_playground.cpp`
+- `tests/master/metadata_pass_test.cpp`
+- Docs: `engines/master.md`, `features/media_listing.md` §8b, `CODE_TREE.md`/`.html`
+
+**Tests:** 179 pass.
+
 ### Media library v1, phases 1–4 (hoardor): ffmpeg metadata, audio and video engines, generic queries, metadata after sync (2026-10-02, branch `abhinavp06/MEDIA_LISTING`)
 
 **Summary:** hoardor now reads what's inside audio and video files and answers generic queries over them, built from `features/media_listing.md` (draft v2, approved 2026-10-02):

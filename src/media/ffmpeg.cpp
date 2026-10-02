@@ -50,6 +50,14 @@ std::expected<Media, std::string> Media::open(const std::filesystem::path& file,
         const AVStream* main = media.first_stream(AVMEDIA_TYPE_AUDIO);
         if (!main) main = media.first_stream(AVMEDIA_TYPE_VIDEO);
         if (!complete || media.duration_ms(main) == 0) {
+            // The probe would also decode an embedded cover picture just to learn its pixel format
+            // (its size is already known): a 3 MB PNG made reading 70x slower (features/
+            // media_listing.md §8b). Nothing here uses the cover's pixels, so a placeholder format
+            // counts as known; embedded_cover() returns the encoded bytes, untouched.
+            for (unsigned i = 0; i < raw->nb_streams; ++i) {
+                AVCodecParameters* p = raw->streams[i]->codecpar;
+                if ((raw->streams[i]->disposition & AV_DISPOSITION_ATTACHED_PIC) && p->format < 0) p->format = AV_PIX_FMT_RGB24;
+            }
             if (const int rc = avformat_find_stream_info(raw, nullptr); rc < 0) return std::unexpected(error_text(rc));
         }
     }

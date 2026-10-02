@@ -47,7 +47,9 @@ public:
 
 ## 1a. Reading metadata after a sync (Media library v1, phase 4)
 
-After each requested sync, and unless it was cancelled, `SyncWorker` reads the metadata of that scope's audio and video files that are new, changed, or never read. It runs on the same thread while the drives are awake (`features/media_listing.md` §4.1):
+After each requested sync, and unless it was cancelled, `SyncWorker` **queues a metadata job** for that scope (since 2026-10-02; it used to run inside the sync). The job reads the scope's audio and video files that are new, changed, or never read, on the same thread, while the drives are awake (`features/media_listing.md` §4.1).
+- **Syncs go ahead of metadata jobs.** A sync request pauses a running pass, which resumes after the sync.
+- **`syncing()` / `reading()`** tell them apart.
 
 ```cpp
 struct MetadataProgress { std::uint64_t done, total; };

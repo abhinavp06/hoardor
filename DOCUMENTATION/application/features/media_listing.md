@@ -336,6 +336,16 @@ How the code differs from §4–§7, and what was measured.
 - **Known limitation:** orders by an aggregate (date added, year, track count) and counts scale with the library. If daily use shows a lag, a per-group summary kept up to date by the metadata pass would make them a page read; TYLI can also cache counts per view.
 - **Not measured on the VM:** reading speed on a cold HDD. The user measures it on Windows.
 
+## 8b. Reading speed (2026-10-02, after the user's report that sync got slow)
+
+- **Separate job:** metadata reading is no longer part of the sync (`engines/master.md` §1a). The sync finishes as fast as before, and reading follows as a pausable background job.
+- **No cover decoding:** ffmpeg's probe, which FLAC always needs, decoded embedded cover pictures to learn their pixel format. A placeholder format now skips that.
+  - 100 FLACs with a 3 MB PNG cover: 20 → 159 files/s
+  - without a cover: 1,733 files/s (warm cache)
+- **Still read in full:** ffmpeg's FLAC reader loads the cover's bytes, about 20 ms per file on an HDD.
+- **Next:** parallel reading per drive (file engine phase 4).
+- **Measuring on the user's drives:** `hoardor_read <folder>` (playground).
+
 ## 9. Not in this feature
 
 - Text (books, blogs): a separate build.

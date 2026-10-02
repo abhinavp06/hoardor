@@ -27,7 +27,7 @@ file::Result<std::unique_ptr<SyncWorker>> SyncWorker::start(const std::filesyste
 
     auto settings = worker->library_->load_settings();
     if (!settings) return std::unexpected(settings.error());
-    if (settings->sync_on_startup) worker->queue_.push_back(std::nullopt);
+    if (settings->sync_on_startup) worker->queue_.push_back(Job{Kind::Sync, std::nullopt});
 
     worker->thread_ = std::jthread([w = worker.get()](std::stop_token stop) { w->run(std::move(stop)); });
     return worker;
@@ -41,9 +41,16 @@ SyncWorker::~SyncWorker() {
 bool SyncWorker::request_sync(Scope category) {
     {
         std::lock_guard lock(mutex_);
-        if (running_ && *running_ == category) return false;
-        if (std::find(queue_.begin(), queue_.end(), category) != queue_.end()) return false;
-        queue_.push_back(category);
+        const Job job{Kind::Sync, category};
+        if (running_ == job) return false;
+        if (std::find(queue_.begin(), queue_.end(), job) != queue_.end()) return false;
+        // Ahead of every metadata job.
+        const auto first_metadata = std::find_if(queue_.begin(), queue_.end(), [](const Job& j) { return j.kind == Kind::Metadata; });
+        queue_.insert(first_metadata, job);
+        if (running_ && running_->kind == Kind::Metadata) {
+            paused_ = true;
+            current_.request_stop();
+        }
     }
     changed_.notify_all();
     return true;
@@ -53,6 +60,7 @@ void SyncWorker::cancel() {
     {
         std::lock_guard lock(mutex_);
         queue_.clear();
+        paused_ = false;
         current_.request_stop();
     }
     changed_.notify_all();
@@ -63,6 +71,18 @@ bool SyncWorker::idle() const {
     return queue_.empty() && !running_;
 }
 
+bool SyncWorker::syncing() const {
+    std::lock_guard lock(mutex_);
+    if (running_ && running_->kind == Kind::Sync) return true;
+    return std::any_of(queue_.begin(), queue_.end(), [](const Job& j) { return j.kind == Kind::Sync; });
+}
+
+bool SyncWorker::reading() const {
+    std::lock_guard lock(mutex_);
+    if (running_ && running_->kind == Kind::Metadata) return true;
+    return std::any_of(queue_.begin(), queue_.end(), [](const Job& j) { return j.kind == Kind::Metadata; });
+}
+
 void SyncWorker::wait_idle() {
     std::unique_lock lock(mutex_);
     changed_.wait(lock, [this] { return queue_.empty() && !running_; });
@@ -70,27 +90,41 @@ void SyncWorker::wait_idle() {
 
 void SyncWorker::run(std::stop_token stop) {
     while (true) {
-        Scope scope;
+        Job job;
         std::stop_source source;
         {
             std::unique_lock lock(mutex_);
             // Waits for work; returns false when the thread is asked to stop.
             if (!changed_.wait(lock, stop, [this] { return !queue_.empty(); })) return;
-            scope = queue_.front();
+            job = queue_.front();
             queue_.pop_front();
-            running_ = scope;
+            running_ = job;
+            paused_ = false;
             current_ = std::stop_source();
             source = current_;  // copies share the same stop state
         }
-        {
-            // Shutting the worker down also stops the running sync.
-            std::stop_callback forward(stop, [source]() mutable { source.request_stop(); });
-            const file::SyncReport report = library_->sync(scope, source.get_token(), callbacks_.on_progress);
-            if (callbacks_.on_finished) callbacks_.on_finished(scope, report);
+        // Shutting the worker down also stops the running job.
+        std::stop_callback forward(stop, [source]() mutable { source.request_stop(); });
+        if (job.kind == Kind::Sync) {
+            const file::SyncReport report = library_->sync(job.scope, source.get_token(), callbacks_.on_progress);
+            if (callbacks_.on_finished) callbacks_.on_finished(job.scope, report);
             if (!report.cancelled && !source.stop_requested()) {
-                const MetadataReport metadata = read_metadata(scope, source.get_token());
-                if (callbacks_.on_metadata_finished) callbacks_.on_metadata_finished(scope, metadata);
+                std::lock_guard lock(mutex_);
+                // One pass per scope; a pass over everything covers a category's.
+                const bool covered = std::any_of(queue_.begin(), queue_.end(), [&](const Job& j) {
+                    return j.kind == Kind::Metadata && (!j.scope || j.scope == job.scope);
+                });
+                if (!covered) queue_.push_back(Job{Kind::Metadata, job.scope});
             }
+        } else {
+            const MetadataReport report = read_metadata(job.scope, source.get_token());
+            bool paused = false;
+            {
+                std::lock_guard lock(mutex_);
+                paused = paused_ && !stop.stop_requested();
+                if (paused) queue_.push_back(job);  // after the sync that paused it
+            }
+            if (!paused && callbacks_.on_metadata_finished) callbacks_.on_metadata_finished(job.scope, report);
         }
         {
             std::lock_guard lock(mutex_);
@@ -103,6 +137,10 @@ void SyncWorker::run(std::stop_token stop) {
 MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
     namespace fs = std::filesystem;
     MetadataReport report;
+    const auto started = std::chrono::steady_clock::now();
+    const auto elapsed = [&] {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
+    };
     auto settings = library_->load_settings();
     auto roots = library_->roots(scope);
     auto audio_total = audio_->pending_count(scope);
@@ -142,6 +180,7 @@ MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
         if (callbacks_.on_metadata_progress && now - last_report >= std::chrono::milliseconds(250)) {
             commit();  // callbacks never run inside a write transaction
             last_report = now;
+            progress.elapsed_ms = elapsed();
             callbacks_.on_metadata_progress(progress);
         }
     };
@@ -218,6 +257,8 @@ MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
     }
     commit();
     report.cancelled = stop.stop_requested();
+    report.elapsed_ms = elapsed();
+    progress.elapsed_ms = report.elapsed_ms;
     (void)audio_->remove_unused_names();
     (void)video_->remove_unused_names();
     if (callbacks_.on_metadata_progress) callbacks_.on_metadata_progress(progress);
