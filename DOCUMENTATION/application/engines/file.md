@@ -163,7 +163,9 @@ As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANN
 | 4. Platform volume support | Volume IDs, drive-arrival triggers, per-volume concurrency, macOS | A future feature doc |
 | Deferred | Realtime watching | Not planned |
 
-### 4.0 Next feature: Media listing (approved proposals, not designed in detail yet)
+### 4.0 Next feature: Media listing → Media library v1 (`features/media_listing.md`)
+
+**Superseded on 2026-10-02 (the user):** listing by file and folder names was rejected in review. The branch now delivers metadata (new `audio` and `video` engines, ffmpeg) and generic query APIs. For the file engine that means `added_ns`, `FileKind::Info` (`.nfo`), and `companions(entry)`. The outline below is kept as history.
 
 The user approved these proposals on 2026-10-01. The detailed design goes in `features/media_listing.md` on a new branch, after File Sync v1 merges. TYLI's tabs list a category's media across all of its folders.
 
@@ -197,7 +199,7 @@ This replaces the plan of 2026-10-02 to put tag reading on `abhinavp06/FILE_SCAN
   - Windows: `GetVolumeInformationW`
   - macOS: DiskArbitration
 - **Volume arrival:** plugging in a drive triggers resolution and an optional sync of its roots. This is the first need for syncing a single root, and it may become a third `sync` overload then. hoardor exposes `check_roots()`. The trigger can come from hoardor's own platform listener, or from TYLI calling `check_roots()` when the OS reports a device change.
-- **Per-volume scan concurrency** (configurable): 1 for an HDD, more for an SSD, RAID, or NAS. Roots on different volumes scan in parallel.
+- **Per-volume scan concurrency** (configurable): 1 for an HDD, more for an SSD, RAID, or NAS. Roots on different volumes scan in parallel. **The user asked for parallel syncing on 2026-10-02.** Proposed as the feature right after Media library v1, covering sync and the metadata pass (`features/media_listing.md` §8).
 - **macOS** mount-point listing (`getmntinfo`).
 
 
