@@ -51,6 +51,19 @@ add_library(hoardor
     src/file/library_sync.cpp
     src/file/root_marker.cpp
 
+    # MEDIA (internal: the ffmpeg layer and the query builder shared by audio and video)
+    src/media/ffmpeg.cpp
+    src/media/query.cpp
+
+    # AUDIO ENGINE
+    src/audio/read.cpp
+    src/audio/library.cpp
+
+    # VIDEO ENGINE
+    src/video/sources.cpp
+    src/video/read.cpp
+    src/video/library.cpp
+
     # MASTER ENGINE
     src/master/sync_worker.cpp
 )

@@ -1,7 +1,9 @@
 #pragma once
 
+#include <hoardor/audio/audio.hpp>
 #include <hoardor/db/database.hpp>
 #include <hoardor/file/library.hpp>
+#include <hoardor/video/video.hpp>
 
 #include <condition_variable>
 #include <deque>
@@ -15,16 +17,34 @@
 
 namespace hoardor::master {
 
+// Reading metadata after a sync (features/media_listing.md §4.1).
+struct MetadataProgress {
+    std::uint64_t done = 0;   // files read (or failed) so far in this pass
+    std::uint64_t total = 0;  // files that needed reading when the pass started
+};
+
+struct MetadataReport {
+    std::uint64_t read = 0;     // stored
+    std::uint64_t failed = 0;   // unreadable: recorded, not retried until the file changes
+    std::uint64_t skipped = 0;  // gone or its drive went away: left for a later pass
+    bool cancelled = false;
+};
+
 struct SyncCallbacks {
     // Both run on the worker thread. They must return quickly, be thread-safe, and
     // not call SyncWorker::wait_idle (that would wait for the callback itself).
     std::function<void(const file::SyncProgress&)> on_progress;
     // The scope that was synced (std::nullopt = everything) and its report.
     std::function<void(std::optional<file::CategoryId>, const file::SyncReport&)> on_finished;
+    // After on_finished, the same scope's audio and video files that are new, changed, or never
+    // read are read while the drives are awake. Same thread rules as above.
+    std::function<void(const MetadataProgress&)> on_metadata_progress;
+    std::function<void(std::optional<file::CategoryId>, const MetadataReport&)> on_metadata_finished;
 };
 
 // Runs file::Library::sync() on a background thread that hoardor owns
-// (features/file_sync.md §4.10, engines/master.md).
+// (features/file_sync.md §4.10, engines/master.md), then reads the metadata of what the
+// sync found (audio and video engines).
 class SyncWorker {
 public:
     // Opens its own connection to `database_file` and starts the thread. If the stored
@@ -52,9 +72,12 @@ private:
 
     SyncWorker(db::Database database, SyncCallbacks callbacks) : database_(std::move(database)), callbacks_(std::move(callbacks)) {}
     void run(std::stop_token stop);
+    MetadataReport read_metadata(Scope scope, std::stop_token stop);
 
     db::Database database_;               // used only by the worker thread once it starts
     std::optional<file::Library> library_;
+    std::optional<audio::Library> audio_;
+    std::optional<video::Library> video_;
     SyncCallbacks callbacks_;
 
     mutable std::mutex mutex_;

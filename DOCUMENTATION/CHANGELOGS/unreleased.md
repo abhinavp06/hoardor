@@ -2,6 +2,93 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Media library v1, phases 1–4 (hoardor): ffmpeg metadata, audio and video engines, generic queries, metadata after sync (2026-10-02, branch `abhinavp06/MEDIA_LISTING`)
+
+**Summary:** hoardor now reads what's inside audio and video files and answers generic queries over them, built from `features/media_listing.md` (draft v2, approved 2026-10-02):
+- **ffmpeg** reads tags and stream information.
+- **Two new engines:** `audio` and `video` store it.
+- **Queries:** filter, order, group, and count by fields, with keyset cursors.
+- **When:** the sync worker reads new and changed files right after each sync, while the drives are awake.
+- **Movie and show info** comes from `.nfo` files (pugixml), embedded tags, or names as a last resort.
+
+TYLI builds every layout from these queries.
+
+**Phase 1** (committed earlier as `b2d8987`):
+- ffmpeg and pugixml in the build
+- `core::Cursor` / `core::Page` and the sort-key helpers
+- `file`: `added_ns`, `FileKind::Info`, `companions()`, migration 2
+
+**Added**
+- **Internal media layer (`src/media/`):**
+  - `ffmpeg.*`: open a file with a bounded probe, its streams, attached picture, duration, tags.
+  - `query.*`: the generic query builder both engines describe their fields to.
+- **`audio`** (`include/hoardor/audio/audio.hpp`, `src/audio/`, `engines/audio.md`):
+  - `read` / `embedded_cover`
+  - `Library` with `pending`, `store`, `store_error`, `remove_unused_names`, `tracks`, `groups`, `count`, `group_count`, `track`
+  - audio migration 1: `audio_tracks`, `audio_names`, `audio_track_names`
+- **`video`** (`include/hoardor/video/video.hpp`, `src/video/`, `engines/video.md`):
+  - `read(path, companions)` / `embedded_poster`
+  - `.nfo` and name parsing (`src/video/sources.*`)
+  - the same `Library` shape
+  - video migration 1: `video_items`, `video_names`, `video_item_names`
+- **`master`:**
+  - `SyncWorker` reads metadata after each non-cancelled sync (`read_metadata`), with `MetadataProgress` / `MetadataReport` callbacks
+  - a file or root that vanished is skipped, not marked unreadable
+- **Benchmark:** `benchmarks/audio/query_benchmark.cpp`.
+
+**Decisions and alternatives rejected**
+- **Generic APIs** (the user): no album or layout concepts in hoardor, and no copy grouping. A "Field" enum per engine, with SQL from fixed fragments, never from caller strings.
+- **Index hints:** SQLite treats `GROUP BY` columns as a set and used the wrong album index, sorting every group. Value-ordered groupings now name their index, but only for broad filters. Alternatives rejected:
+  - depending on index creation order (fragile)
+  - SQLite's test-control optimization flags (not public API)
+- **Cursors:** row-value seeks when every key sorts the same way, an OR chain otherwise. For value-ordered groups the cursor goes in `WHERE`, not `HAVING`.
+- **Name filters:** one link row joined through a name-id subquery, instead of `EXISTS`, so SQLite can start from that name's rows.
+- **Unplayable files:** stored with `read_error` (left out of queries, not retried until changed). ffmpeg's logging is silenced, because an app has no console.
+- **Test fixtures:** made with the ffmpeg command-line tool at test time, so nothing binary is committed. The tests skip without the tool.
+- **`movie.nfo`:** applies to any video in its folder. The design's "shared by two videos applies to neither" was dropped (it needs the folder's other entries).
+
+**Files**
+- New:
+  - `src/media/ffmpeg.{hpp,cpp}`, `src/media/query.{hpp,cpp}`
+  - `include/hoardor/audio/audio.hpp`, `src/audio/{read,library}.cpp`
+  - `include/hoardor/video/video.hpp`, `src/video/{sources.hpp,sources.cpp,read.cpp,library.cpp}`
+  - `tests/support/media_files.hpp`, `tests/audio/{read,library}_test.cpp`, `tests/video/{sources,read,library}_test.cpp`, `tests/master/metadata_pass_test.cpp`
+  - `benchmarks/audio/query_benchmark.cpp`
+  - `DOCUMENTATION/application/engines/{audio,video}.md`
+- Changed:
+  - `CMakeLists.txt`, `tests/CMakeLists.txt` (`HOARDOR_FFMPEG_TOOL`), `benchmarks/CMakeLists.txt`, `third_party/CMakeLists.txt` (ffmpeg include folder as SYSTEM)
+  - `include/hoardor/master/sync_worker.hpp`, `src/master/sync_worker.cpp`
+  - `DOCUMENTATION/application/{DATABASE.md, CODE_TREE.md, CODE_TREE.html, features/media_listing.md, engines/master.md}`
+
+**Tests:** 177 in total (45 new in phases 2–4), all passing on Linux.
+- **Audio reading:** FLAC 24/96, MP3 320 CBR, AAC, Vorbis, Opus, WAV, ALAC; tags, totals, dates, sort tags; fallbacks; Unicode; embedded covers; garbage and missing files.
+- **Audio queries:**
+  - pending work (unsettled, offline, stale, errors)
+  - filters ignoring case and articles
+  - paging every order without gaps or repeats
+  - album groups in every order
+  - several artists or genres per track
+  - two copies of an album as one group
+  - cascades, unused names, bad requests
+- **Video:**
+  - `.nfo` (movie, episode, tvshow, Kodi URL tail, broken), names (SxxEyy, NxNN, season folders, years)
+  - streams and languages, HDR10 and HLG, `.nfo` over tags, posters, attachments
+  - one card per movie whatever the copies; show, season, and episode grouping; directors vs writers; removed posters; group paging
+- **Metadata pass:** the end-to-end read, only changed files next time, unsettled files waiting, videos with their `.nfo` and poster, cancel.
+
+**Performance** (Release, this VM): see `features/media_listing.md` §8a.
+- Albums by name: about 3.6 ms per page at both 50k and 500k tracks.
+- An album's tracks: 0.1 ms.
+- Albums of a genre: 3.6 ms at 50k, 29 ms at 500k.
+- Albums by date added: 73 ms at 50k, 837 ms at 500k.
+- Album and track counts: 376 and 142 ms at 500k.
+
+**Known limitations / follow-ups**
+- Aggregate orders (date added, year) and counts scale with the library; a per-group summary could fix them if daily use shows lag.
+- The cold-HDD reading speed is to be measured on Windows.
+- Album identity is (album artist, album). Two different albums with the same name by one artist merge, and an untagged compilation splits by track artist.
+- The metadata pass only runs after a sync, never on its own at startup (it would wake drives).
+
 ### Media library v1 designed (draft v2): metadata moves into this branch; `DATABASE.md` (2026-10-02, branch `abhinavp06/MEDIA_LISTING`)
 
 **Summary:** The user reviewed draft v1's mockups (listing by file and folder names) and rejected names from files. `features/media_listing.md` is rewritten as **Media library v1**. Nothing is built yet:

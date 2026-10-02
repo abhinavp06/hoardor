@@ -1,6 +1,10 @@
 #include <hoardor/master/sync_worker.hpp>
 
+#include "file/text.hpp"
+
 #include <algorithm>
+#include <chrono>
+#include <map>
 
 namespace hoardor::master {
 
@@ -14,6 +18,12 @@ file::Result<std::unique_ptr<SyncWorker>> SyncWorker::start(const std::filesyste
     auto library = file::Library::open(worker->database_, std::move(mounts));
     if (!library) return std::unexpected(library.error());
     worker->library_.emplace(std::move(*library));
+    auto audio = audio::Library::open(worker->database_);
+    if (!audio) return std::unexpected(file::Error{file::ErrorCode::Database, audio.error().message});
+    worker->audio_.emplace(std::move(*audio));
+    auto video = video::Library::open(worker->database_);
+    if (!video) return std::unexpected(file::Error{file::ErrorCode::Database, video.error().message});
+    worker->video_.emplace(std::move(*video));
 
     auto settings = worker->library_->load_settings();
     if (!settings) return std::unexpected(settings.error());
@@ -77,6 +87,10 @@ void SyncWorker::run(std::stop_token stop) {
             std::stop_callback forward(stop, [source]() mutable { source.request_stop(); });
             const file::SyncReport report = library_->sync(scope, source.get_token(), callbacks_.on_progress);
             if (callbacks_.on_finished) callbacks_.on_finished(scope, report);
+            if (!report.cancelled && !source.stop_requested()) {
+                const MetadataReport metadata = read_metadata(scope, source.get_token());
+                if (callbacks_.on_metadata_finished) callbacks_.on_metadata_finished(scope, metadata);
+            }
         }
         {
             std::lock_guard lock(mutex_);
@@ -84,6 +98,130 @@ void SyncWorker::run(std::stop_token stop) {
         }
         changed_.notify_all();
     }
+}
+
+MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
+    namespace fs = std::filesystem;
+    MetadataReport report;
+    auto settings = library_->load_settings();
+    auto roots = library_->roots(scope);
+    auto audio_total = audio_->pending_count(scope);
+    auto video_total = video_->pending_count(scope);
+    if (!settings || !roots || !audio_total || !video_total) return report;
+
+    // Only roots the sync just found online are read (pending() also checks that).
+    std::map<file::RootId, fs::path> online;
+    for (const file::Root& r : *roots) {
+        if (r.status == file::RootStatus::Online) online[r.id] = file::detail::from_utf8(r.path);
+    }
+    MetadataProgress progress{0, *audio_total + *video_total};
+    if (progress.total == 0) return report;
+
+    // Short write batches, like the sync, so other connections never wait long.
+    std::optional<db::Transaction> tx;
+    int rows = 0;
+    auto batch_started = std::chrono::steady_clock::now();
+    auto last_report = batch_started;
+    const auto commit = [&] {
+        if (tx) (void)tx->commit();
+        tx.reset();
+    };
+    const auto before_write = [&] {
+        if (!tx) {
+            if (auto begun = db::Transaction::begin(database_)) tx.emplace(std::move(*begun));
+            rows = 0;
+            batch_started = std::chrono::steady_clock::now();
+        }
+    };
+    const auto after_write = [&] {
+        ++progress.done;
+        const auto now = std::chrono::steady_clock::now();
+        if (++rows >= settings->batch_max_rows || now - batch_started >= std::chrono::milliseconds(settings->batch_max_milliseconds)) {
+            commit();
+        }
+        if (callbacks_.on_metadata_progress && now - last_report >= std::chrono::milliseconds(250)) {
+            commit();  // callbacks never run inside a write transaction
+            last_report = now;
+            callbacks_.on_metadata_progress(progress);
+        }
+    };
+    // A failed read: unreadable file, or the file or its drive went away (then it's left alone).
+    std::map<file::RootId, bool> lost;
+    const auto gone = [&](file::RootId root, const fs::path& path) {
+        std::error_code ec;
+        if (!fs::is_directory(online[root], ec)) lost[root] = true;
+        return lost[root] || !fs::exists(path, ec);
+    };
+
+    // Audio.
+    for (audio::EntryId after = 0; !stop.stop_requested();) {
+        auto page = audio_->pending(scope, after, 200);
+        if (!page || page->empty()) break;
+        for (const auto& p : *page) {
+            after = p.entry_id;
+            if (stop.stop_requested()) break;
+            if (lost[p.root_id] || !online.contains(p.root_id)) {
+                ++report.skipped;
+                continue;
+            }
+            const fs::path path = online[p.root_id] / file::detail::from_utf8(p.relative_path);
+            auto info = audio::read(path);
+            if (!info && gone(p.root_id, path)) {
+                ++report.skipped;
+                continue;
+            }
+            before_write();
+            if (info) {
+                if (audio_->store(p.entry_id, p.size, p.mtime_ns, *info)) ++report.read;
+            } else if (audio_->store_error(p.entry_id, p.size, p.mtime_ns, info.error().message)) {
+                ++report.failed;
+            }
+            after_write();
+        }
+    }
+
+    // Video, with each file's .nfo and images (up to the show's folder).
+    for (video::EntryId after = 0; !stop.stop_requested();) {
+        auto page = video_->pending(scope, after, 200);
+        if (!page || page->empty()) break;
+        for (const auto& p : *page) {
+            after = p.entry_id;
+            if (stop.stop_requested()) break;
+            if (lost[p.root_id] || !online.contains(p.root_id)) {
+                ++report.skipped;
+                continue;
+            }
+            const fs::path base = online[p.root_id];
+            const fs::path path = base / file::detail::from_utf8(p.relative_path);
+            std::vector<fs::path> companion_paths;
+            std::vector<file::EntryId> companion_ids;
+            if (auto companions = library_->companions(p.entry_id, 2)) {
+                for (const file::Entry& c : *companions) {
+                    companion_paths.push_back(base / file::detail::from_utf8(c.relative_path));
+                    companion_ids.push_back(c.id);
+                }
+            }
+            auto info = video::read(path, companion_paths);
+            if (!info && gone(p.root_id, path)) {
+                ++report.skipped;
+                continue;
+            }
+            before_write();
+            if (info) {
+                const file::EntryId poster = info->poster_index >= 0 ? companion_ids[static_cast<std::size_t>(info->poster_index)] : 0;
+                if (video_->store(p.entry_id, p.size, p.mtime_ns, *info, poster)) ++report.read;
+            } else if (video_->store_error(p.entry_id, p.size, p.mtime_ns, info.error().message)) {
+                ++report.failed;
+            }
+            after_write();
+        }
+    }
+    commit();
+    report.cancelled = stop.stop_requested();
+    (void)audio_->remove_unused_names();
+    (void)video_->remove_unused_names();
+    if (callbacks_.on_metadata_progress) callbacks_.on_metadata_progress(progress);
+    return report;
 }
 
 }

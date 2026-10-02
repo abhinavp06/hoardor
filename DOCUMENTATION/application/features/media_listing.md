@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Draft v2, awaiting the user's approval** (2026-10-02). Reworked after the user's review of draft v1 (file-name listing, which was rejected). Nothing is built yet |
+| Status | **hoardor phases 1–4 built** (2026-10-02, 177 tests); TYLI (phase 5) in progress. Design approved 2026-10-02 (draft v2, after the user's review of draft v1, the file-name listing, which was rejected) |
 | Branch | `abhinavp06/MEDIA_LISTING` (one PR; pairs with TYLI's branch of the same name) |
 | Ships in | `v0.2.0` |
 | Engines involved | `core` (first component: the paging types), `file` (date added, companions, `.nfo` kind), **`audio`** (new: track metadata + queries), **`video`** (new: movie/episode metadata + queries), `master` (reads metadata after each sync), `db` (nothing new) |
@@ -299,6 +299,42 @@ CREATE INDEX audio_track_names_name ON audio_track_names (name_id, entry_id);
 - The user wants every added folder synced in parallel. The rule from ARCHITECTURE §6 still applies: **parallel per physical drive, not per folder.** Two folders on one spinning HDD read at once make its head seek back and forth, which is slower than one after the other. Different drives can run side by side.
 - This is file engine phase 4: per-volume concurrency, 1 for an HDD and more for an SSD or NAS. It needs to know which roots share a device (volume ids per OS).
 - **Proposed:** its own feature right after this branch. It speeds up both sync and the metadata pass, which is the slow part on a cold HDD. To be discussed with the user then.
+
+## 8a. As built (2026-10-02)
+
+How the code differs from §4–§7, and what was measured.
+
+- **Headers:** one public header per engine, `include/hoardor/audio/audio.hpp` and `include/hoardor/video/video.hpp`. `core::Cursor` / `core::Page` are in `include/hoardor/core/page.hpp`.
+- **Names in the API:**
+  - `GroupOrder::Values` (the design's `Keys`); `Group::values`
+  - video groups have `items`, `max_height`, `any_hdr`, `poster_entry`, `embedded_poster_entry`
+  - `video::Type`, `video::Source`, `video::Stream`
+  - `read(path, companions)` returns `info_index` / `poster_index`, and `master` maps them to entry ids
+- **Work list:** each engine's `pending(category)` (settled entries, online roots, missing or stale rows); `master` reads them in one ordered pass. That covers both "changed by this sync" and "the backlog".
+- **Unplugged drive:** a failed read is **skipped** (not recorded) when the file or its root has gone, so a drive unplugged mid-pass doesn't mark its files unreadable.
+- **`movie.nfo`** is used for any video in its folder. The design's "shared by two videos applies to neither" isn't implemented (it would need the folder's other entries).
+- **Unplayable files:** ffmpeg guesses a format even for random bytes. A file with no sample rate or no length (audio), or no picture size (video), is "not playable" and stored as unreadable. ffmpeg's own logging is silenced: hoardor reports problems in its results.
+- **The query builder** (`src/media/query.*`), shared by both engines. Measuring showed three things the design didn't foresee:
+  - **SQLite treats `GROUP BY` columns as a set.** It streamed artist-then-album groups from the (album, artist) index (whichever matching index was created last), then sorted every group. Each grouping now names its index (`INDEXED BY`), but only when ordered by its values and filtered broadly (category, root, type).
+  - **Cursors** are a row-value comparison (`(a, b) > (?, ?)`, an index seek) when every key sorts the same way, and an OR chain otherwise. For value-ordered groups the cursor is a `WHERE` condition, not a `HAVING`.
+  - **A filter on a name** (artist, genre, director) joins one link row (`name_id = (SELECT id …)`) instead of an `EXISTS`, so SQLite starts from that name's rows.
+- **Fixtures:** the tests make small real media files with the ffmpeg command-line tool at test time. They skip without it.
+
+**Performance** (Release, this VM; `benchmarks/audio/query_benchmark.cpp`; 10 tracks per album, 20 albums per artist, 40 genres):
+
+| Query | 50k tracks | 500k tracks | Target |
+|---|---|---|---|
+| Albums by name: first page / a page in the middle | 3.5 / 3.4 ms | 3.7 / 3.6 ms | < 10 ms ✓ (flat) |
+| Albums of a genre, first page | 3.6 ms | 28.8 ms | < 10 ms ✗ at 500k (a genre there has 12,500 tracks) |
+| One album's tracks | 0.12 ms | 0.10 ms | ✓ |
+| Tracks by title, a page in the middle | 0.68 ms | 0.62 ms | ✓ |
+| Albums by date added (newest first), first page | 73 ms | 837 ms | ✗: needs every album's total |
+| `group_count` (albums) / `count` (tracks) | 37 / 14 ms | 376 / 142 ms | < 50 ms ✗ at 500k |
+| `pending_count` when nothing is pending | 25 ms | 212 ms | (runs once per pass) |
+
+- **At the user's size** (about 15k tracks, about 1,300 albums), the slow rows are roughly 10–25 ms.
+- **Known limitation:** orders by an aggregate (date added, year, track count) and counts scale with the library. If daily use shows a lag, a per-group summary kept up to date by the metadata pass would make them a page read; TYLI can also cache counts per view.
+- **Not measured on the VM:** reading speed on a cold HDD. The user measures it on Windows.
 
 ## 9. Not in this feature
 

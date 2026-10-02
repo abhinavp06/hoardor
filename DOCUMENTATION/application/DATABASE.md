@@ -5,7 +5,7 @@ The one place that describes **every table in hoardor's SQLite database**: what 
 - **Mechanics** (connections, pragmas, statements, transactions, the migration runner) are in `engines/db.md`.
 - **Why one database, and who owns which tables:** `ARCHITECTURE.md` §3.
 
-Status: `v0.1.0` (file migration 1), plus file migration 2 built on `abhinavp06/MEDIA_LISTING` (Media library v1, phase 1). The rest of `features/media_listing.md` is listed in §5 until it's built.
+Status: `v0.1.0` (file migration 1), plus Media library v1 built on `abhinavp06/MEDIA_LISTING`: file migration 2, audio migration 1, video migration 1.
 
 ## 1. Rules
 
@@ -32,13 +32,19 @@ Status: `v0.1.0` (file migration 1), plus file migration 2 built on `abhinavp06/
 - **Ids:** `INTEGER PRIMARY KEY` (SQLite's rowid), never reused while the row exists. An entry keeps its id across syncs, renames of case on case-insensitive drives, and relocations of its root. Future per-file data, such as play counts, hangs off it.
 - **No unbounded reads:** every list query is paged, by keyset (`WHERE id > ? … LIMIT ?`), never `OFFSET` (ARCHITECTURE §4).
 
-## 2. Overview (`v0.1.0`)
+## 2. Overview
 
 ```mermaid
 erDiagram
     file_categories ||--o{ file_roots : "category_id"
     file_roots ||--o{ file_entries : "root_id (cascade)"
     file_roots ||--o{ file_scan_errors : "root_id (cascade)"
+    file_entries ||--o| audio_tracks : "entry_id (cascade)"
+    audio_tracks ||--o{ audio_track_names : "entry_id (cascade)"
+    audio_names ||--o{ audio_track_names : "name_id"
+    file_entries ||--o| video_items : "entry_id (cascade)"
+    video_items ||--o{ video_item_names : "entry_id (cascade)"
+    video_names ||--o{ video_item_names : "name_id"
     file_settings
     db_migrations
 ```
@@ -51,6 +57,12 @@ erDiagram
 | `file_roots` | `file` | one per added folder | folders the user assigned to categories |
 | `file_entries` | `file` | **one per media file** (the big one, 500k tested) | what sync found: path, size, mtime, kind |
 | `file_scan_errors` | `file` | a few per root | what the last sync of a root couldn't read |
+| `audio_tracks` | `audio` | one per audio file read | tags and stream info, with sort keys |
+| `audio_names` | `audio` | one per artist or genre | each name once (identity: its sort key) |
+| `audio_track_names` | `audio` | a few per track | a track's artists and genres |
+| `video_items` | `video` | one per video file read | movie or episode: descriptions, streams, poster |
+| `video_names` | `video` | one per genre or person | each name once |
+| `video_item_names` | `video` | a few per item | an item's genres, directors, writers (with a role) |
 
 ## 3. Tables
 
@@ -146,23 +158,84 @@ A category with roots can't be deleted (`InUse`).
 
 - `INDEX file_scan_errors_root (root_id, generation)`. Each sync deletes the rows of older generations.
 
+### `audio_tracks`
+
+| Column | Type | Meaning |
+|---|---|---|
+| `entry_id` | INTEGER PK → `file_entries` ON DELETE CASCADE | the file |
+| `source_size`, `source_mtime_ns` | INTEGER | the entry's size and mtime when read; different from the entry's now = stale, read again |
+| `read_error` | TEXT | "" or why the file couldn't be read (such rows are left out of every query) |
+| `title`, `album`, `album_artist` | TEXT | as tagged (or the fallbacks: file name, folder name, first artist / "Unknown artist") |
+| `title_key`, `album_key`, `album_artist_key` | TEXT | `core::sort_key` of the sort tag or the value |
+| `title_from_name`, `album_from_name` | INTEGER | 1 when the fallback was used |
+| `artist`, `genre` | TEXT | all values, one per line (display); the identity is in `audio_track_names` |
+| `artist_key` | TEXT | the first artist's sort key (ordering by artist) |
+| `track`, `track_total`, `disc`, `disc_total` | INTEGER | 0 = not tagged |
+| `date` / `year` | TEXT / INTEGER | as tagged / its year (0 = none) |
+| `duration_ms`, `bitrate_kbps`, `sample_rate`, `bit_depth`, `channels` | INTEGER | stream info; `bit_depth` 0 for lossy codecs |
+| `codec` | TEXT | ffmpeg's codec name |
+| `lossless`, `has_embedded_cover` | INTEGER | |
+
+- **Indexes:**
+  - `audio_tracks_album (album_artist_key, album_key, disc, track)`: albums by artist then name, and an album's tracks
+  - `audio_tracks_album_title (album_key, album_artist_key)`: albums by name
+  - `audio_tracks_year (year, album_artist_key, album_key)`: a year's albums
+  - `audio_tracks_title (title_key)`: tracks by title
+- **Query hint:** the album groupings name their index (`INDEXED BY`) when ordered by their values and filtered only broadly. SQLite treats `GROUP BY` columns as a set and would otherwise stream from whichever matching index was created last, then sort every group.
+- **Read-only joins:**
+  - `file_entries` (`root_id`, `added_ns`, `size`, `kind`, `unsettled`, `mtime_ns`, `relative_path` for pending work)
+  - `file_roots` (`category_id`, `status`)
+
+### `audio_names` / `audio_track_names`
+
+| Table | Columns |
+|---|---|
+| `audio_names` | `id` PK, `kind` (1 artist, 2 genre), `name` (as first seen), `key` (sort key); `UNIQUE (kind, key)`, so "Soul" and "soul" are one genre |
+| `audio_track_names` | `entry_id` → `audio_tracks` ON DELETE CASCADE, `name_id` → `audio_names`, `position` (tag order); PK `(entry_id, name_id)`, WITHOUT ROWID; index `(name_id, entry_id)` |
+
+Names no track uses are deleted at the end of each metadata pass (`remove_unused_names`). A filter on a name joins one link row: `name_id = (SELECT id … WHERE kind = ? AND key = ?)`.
+
+### `video_items`
+
+| Column | Type | Meaning |
+|---|---|---|
+| `entry_id` | INTEGER PK → `file_entries` ON DELETE CASCADE | |
+| `source_size`, `source_mtime_ns`, `read_error` | | as in `audio_tracks` |
+| `type` | INTEGER | `video::Type`: 1 movie, 2 episode |
+| `title` / `title_key` | TEXT | the movie's or episode's title / its sort key |
+| `show` / `show_key` | TEXT | episodes |
+| `season`, `episode` | INTEGER | -1 / 0 = unknown; season 0 = specials |
+| `year`, `date`, `plot` | | |
+| `genre`, `director` | TEXT | display lists, one per line |
+| `duration_ms`, `width`, `height`, `frame_rate_milli` | INTEGER | |
+| `hdr`, `video_codec` | TEXT | "", "HDR10", "HLG", "Dolby Vision" / ffmpeg's codec name |
+| `audio_streams`, `subtitle_streams` | TEXT | one stream per line: `language\tcodec\tchannels\ttitle` |
+| `source`, `from_name` | INTEGER | `video::Source` (1 name, 2 tags, 3 nfo); 1 if the title came from the file name |
+| `poster_entry` | INTEGER | a companion image's `file_entries.id` (0: none); read through a `LEFT JOIN`, so a removed image reads as 0 |
+| `embedded_poster` | INTEGER | the file holds a poster |
+
+- **Indexes:**
+  - `video_items_title (type, title_key, year)`: movies (one card per title and year)
+  - `video_items_show (type, show_key, season, episode)`: shows, seasons, episodes
+  - `video_items_year (year)`
+- **Read-only joins:** as for audio, plus `file_entries` again as `p` (the poster).
+
+### `video_names` / `video_item_names`
+
+| Table | Columns |
+|---|---|
+| `video_names` | `id` PK, `kind` (1 genre, 2 person), `name`, `key`; `UNIQUE (kind, key)` |
+| `video_item_names` | `entry_id` → `video_items` ON DELETE CASCADE, `name_id` → `video_names`, `role` (1 genre, 2 director, 3 writer), `position`; PK `(entry_id, name_id, role)`, WITHOUT ROWID; index `(name_id, role, entry_id)` |
+
 ## 4. Migration history
 
 | Component | Version | Shipped in | Change |
 |---|---|---|---|
 | `file` | 1 | `v0.1.0` | All `file_*` tables above and the four seeded categories |
 | `file` | 2 | (v0.2.0, Media library v1) | `file_entries.added_ns` (backfilled from `mtime_ns`) and its index; `info` added to the Movies and Shows categories; `nfo=info` appended to a saved extension map that doesn't map `.nfo` yet |
+| `audio` | 1 | (v0.2.0, Media library v1) | `audio_tracks`, `audio_names`, `audio_track_names` and their indexes |
+| `video` | 1 | (v0.2.0, Media library v1) | `video_items`, `video_names`, `video_item_names` and their indexes |
 
 ## 5. Proposed (not built)
 
-These changes stay here until they're built, then move into §2–§4.
-
-- **`features/media_listing.md` §6** (Media library v1, draft v2, awaiting approval):
-  - **`audio` migration 1:**
-    - `audio_tracks`: one row per audio entry, holding tags, stream info, sort keys, and the source size and mtime that detect stale rows
-    - `audio_names`: each artist or genre once
-    - `audio_track_names`: a track's many artists and genres
-  - **`video` migration 1:** `video_items`, `video_names`, and `video_item_names` (genres, directors, writers, actors).
-  - **Read-only joins** from `audio_*` and `video_*` queries:
-    - `file_entries`: `root_id`, `added_ns`, `size`, `unsettled`
-    - `file_roots`: `category_id`, `status`
+Nothing at the moment. A feature doc that changes the schema lists its tables here until they're built.
