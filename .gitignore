@@ -1,0 +1,10 @@
+*.exe
+/.vs
+/build*/
+/out
+/output/*
+!/output/.gitkeep
+*.wav
+*.lib
+*.obj
+__pycache__/
