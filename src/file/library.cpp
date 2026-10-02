@@ -742,4 +742,14 @@ Result<std::vector<Entry>> Library::companions(EntryId entry_id, int parent_leve
     return out;
 }
 
+Result<Entry> Library::entry(EntryId id) {
+    auto st = db_->prepare("SELECT " + std::string(detail::entry_columns()) + " FROM file_entries WHERE id = ?");
+    if (!st) return std::unexpected(database_error(st.error()));
+    st->bind(1, id);
+    auto row = st->step();
+    if (!row) return std::unexpected(database_error(row.error()));
+    if (!*row) return std::unexpected(Error{ErrorCode::NotFound, "no such file"});
+    return detail::read_entry(*st);
+}
+
 }

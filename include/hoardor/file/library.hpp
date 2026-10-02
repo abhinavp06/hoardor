@@ -170,6 +170,8 @@ public:
 
     // ---- Reads ----
 
+    // One entry by id (NotFound if it's gone). Reads SQLite only.
+    Result<Entry> entry(EntryId id);
     // Paged by id, ascending, so consumers never load everything.
     Result<std::vector<Entry>> entries(RootId root, EntryId after = 0, std::size_t limit = 500);
     // The entries added or changed by one sync (RootSyncReport::generation), paged by id.

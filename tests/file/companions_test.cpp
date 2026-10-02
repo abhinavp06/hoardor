@@ -95,3 +95,15 @@ TEST_F(CompanionsTest, UnknownEntry) {
     ASSERT_FALSE(r.has_value());
     EXPECT_EQ(r.error().code, ErrorCode::NotFound);
 }
+
+TEST_F(CompanionsTest, OneEntryById) {
+    dir.write("music/a.flac", 7);
+    const Root root = add("Music", dir.path() / "music");
+    const EntryId id = id_of(root.id, "a.flac");
+    const auto e = library->entry(id);
+    ASSERT_TRUE(e.has_value());
+    EXPECT_EQ(e->relative_path, "a.flac");
+    EXPECT_EQ(e->size, 7u);
+    EXPECT_EQ(e->root_id, root.id);
+    EXPECT_EQ(library->entry(id + 1000).error().code, ErrorCode::NotFound);
+}

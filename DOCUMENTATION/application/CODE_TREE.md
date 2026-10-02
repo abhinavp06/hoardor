@@ -156,7 +156,7 @@ hoardor/
 │   │           ├── sync ······· .sync(optional category, stop_token, progress) -> SyncReport   roots of a category, or all
 │   │           │                .sync_root(id, stop_token, progress) -> RootSyncReport
 │   │           │                .apply_held_removals(id)   applies removals the mass-removal guard held
-│   │           ├── reads ······ .entries(root, after, limit) · .changed_entries(root, generation, after, limit)   paged by id
+│   │           ├── reads ······ .entry(id) · .entries(root, after, limit) · .changed_entries(root, generation, after, limit)   paged by id
 │   │           │                .scan_errors(root, limit) · .resolve(entry) -> path | RootOffline | FileMissing   (playback)
 │   │           │                .companions(entry, parent_levels, limit)   images, subtitles, .nfo in its folder (+ parents), nearest first
 │   │           ├── struct Resolution            (private) { online, relocated, reason }
@@ -265,7 +265,7 @@ hoardor/
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 177 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 178 tests, run by ctest)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
 │   ├── support/
@@ -334,7 +334,7 @@ hoardor/
 │   │   │   │                                   RootWithoutMarkerWritesNothing, ReadOnlyFolderFallsBackToNoMarker,
 │   │   │   │                                   RootCategoryCanChangeButOnlyToAnExistingOne, RemoveRootKeepsItsMarkerOnDisk
 │   │   │   └── RootMarker.RejectsMalformedFiles
-│   │   ├── companions_test.cpp                 5 TESTs (class CompanionsTest): ImagesNextToATrackButNotInOtherFolders,
+│   │   ├── companions_test.cpp                 6 TESTs (class CompanionsTest): OneEntryById, ImagesNextToATrackButNotInOtherFolders,
 │   │   │                                       AVideosNfoSubtitlesAndTheShowsFilesTwoLevelsUp, FilesDirectlyInTheRoot, CaseInsensitiveRootsAndTheLimit, UnknownEntry
 │   │   ├── migration_test.cpp                  4 TESTs: FileMigration.{AV010LibraryKeepsItsEntriesAndGetsAddedTimes, VideoCategoriesGainInfoOnce,
 │   │   │                                       SavedExtensionMapGainsNfo, AUserMappingOfNfoIsKept}
