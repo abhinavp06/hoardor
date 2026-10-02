@@ -6,4 +6,5 @@
 !/output/.gitkeep
 *.wav
 *.lib
-*.obj__pycache__/
+*.obj
+__pycache__/

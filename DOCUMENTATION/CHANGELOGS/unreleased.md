@@ -2,6 +2,26 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Repo hygiene: `.gitignore` fix; the `build-release/` history question is settled (2026-10-02, branch `abhinavp06/FILE_SCANNER_INIT`)
+
+**Summary:**
+- **`.gitignore`:** the last line read `*.obj__pycache__/`. `0c5b265` ("Ignore Python bytecode caches") appended `__pycache__/` to a file with no trailing newline, so the two patterns merged into one that matches nothing. As a result, neither `*.obj` nor `__pycache__/` was ignored. They're two lines again.
+- **`build-release/` stays in history (decided by the user, 2026-10-02):** this corrects the open question in the "Fixed" note of the 500k-benchmark entry below. The folder was committed by mistake in `4ceea17`, updated in `df7a156`, and untracked in `c592c42`. `.gitignore` (`/build*/`) keeps it out from then on.
+  - The roughly 7 MB of build output (353 files) remains inside those two commits.
+  - It exists only on this branch, not on `master`, but a normal merge will bring it into `master`'s history.
+  - The user accepted that.
+
+**Decisions and alternatives rejected** (for `build-release/`)
+- **Rewrite the branch to remove it:** rejected. It would change 17 commit IDs, which some docs cite, and need a force-push, all to save 7 MB.
+- **Squash-merge the PR to keep it out of `master`:** not needed for this. It would collapse the branch's step-by-step commits into one just to drop 7 MB. How the PR merges is still the user's call at PR time.
+- **Chosen: leave history as it is.** The folder is untracked and ignored. Recreate it with the benchmark command in `CLAUDE.md` when measuring, a few minutes with `-j4`.
+
+**Files**
+- `.gitignore`, `DOCUMENTATION/CHANGELOGS/unreleased.md`.
+
+**Tests**
+- No code changed. `git check-ignore` confirms `x.obj` and `tools/__pycache__/a.pyc` now match lines 9 and 10.
+
 ### Fix: `from_unix_ns` didn't compile with MSVC (2026-10-02, branch `abhinavp06/FILE_SCANNER_INIT`)
 
 **Summary:** The first Windows build (TYLI's GitHub Actions workflow, which builds hoardor from this repo's branch) stopped at `src/file/file_time.hpp`: `error C2440: 'return': cannot convert from time_point<file_clock, nanoseconds> to time_point<_File_time_clock, 100 ns>`. `std::filesystem::file_time_type` ticks in 1 ns with libstdc++ but in 100 ns with MSVC. `clock_cast` from a nanosecond `sys_time` gives a nanosecond time point, and C++ refuses to narrow it implicitly to MSVC's coarser `file_time_type`. On Linux the types are the same, so it never showed. This was hoardor's first compile under MSVC (CI is deferred).
