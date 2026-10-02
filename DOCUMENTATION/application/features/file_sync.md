@@ -599,6 +599,18 @@ What it costs:
 4. **Mass-removal guard:** 25% of a root's entries by default, configurable.
 
 
+## 5a. Decisions awaiting the user's code review
+
+The user asked for both phases to be built without stopping, so these phase 2 choices were made during implementation. Confirm or change them when reviewing the code before the merge:
+
+1. **One database connection per thread** instead of a dedicated writer thread. Background writes commit in short batches (2000 rows or 50 ms).
+2. **`master` doesn't intercept configuration changes during a sync.** The app may call `SyncWorker::cancel()` first, and transactions plus foreign keys keep the data consistent either way.
+3. **Four default categories** (Music, Movies, Shows, Books) are seeded by migration 1.
+4. **"Unsettled" uses a symmetric window** (`|mtime − now| < settle window`), so files with future timestamps don't stay unsettled forever.
+5. **A folder the user really emptied stays Offline** and keeps its entries (the empty-root guard), instead of being wiped.
+
+Also pending: `build-release/` was committed by mistake in `4ceea17` and `df7a156`. Either squash-merge the PR, or rewrite the branch and force-push (only with the user's go-ahead).
+
 ## 6. Open items to revisit
 
 ### OI-1: Playback stutter during a sync (IMPORTANT, revisit during benchmarking and testing)

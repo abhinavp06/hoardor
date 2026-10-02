@@ -163,6 +163,18 @@ As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANN
 | 4. Platform volume support | Volume IDs, drive-arrival triggers, per-volume concurrency, macOS | A future feature doc |
 | Deferred | Realtime watching | Not planned |
 
+### 4.0 Next feature: Media listing (approved proposals, not designed in detail yet)
+
+The user approved these proposals on 2026-10-01. The detailed design goes in `features/media_listing.md` on a new branch, after File Sync v1 merges. TYLI's tabs list a category's media across all of its folders.
+
+- **Listed kinds per category:** a new category setting next to the accepted kinds. Music lists audio; Movies and Shows list video; Books lists text. Cover images and subtitles are companions of a file, not list items.
+- **Rows** show file facts until tag reading exists: name, folder, size, modified date, kind, which root it belongs to, and whether that root is online. The API is shaped so artist, album, and title can be added later.
+- **Sorting:** folder then name (the default: album and season order), name, and date added. Each sort gets an index, so it stays fast at 500k files.
+- **Cursor (keyset) paging:** "the next N after this row". It stays fast deep into a list, doesn't skip or repeat rows while a sync runs, and matches Qt's `fetchMore`.
+- **Offline roots:** their files are listed and shown greyed out. Listing never touches a drive.
+- **A cheap total count per category.**
+- **Search by name:** a later phase.
+
 ### 4.1 Phase 3: Moves and renames (outline)
 
 - **Fingerprint:** size plus the first and last N KiB (configurable), computed only for files whose path disappeared and a new path with the same size appeared, never for the whole library.
