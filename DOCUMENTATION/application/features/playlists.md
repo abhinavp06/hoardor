@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Draft, waiting for the user's approval** (2026-10-03), with TYLI `features/playlists_ui.md` and the mockups `playlist.html`, `liked.html` |
+| Status | **Approved** (2026-10-03, "okay with almost everything", with changes: §1a), with TYLI `features/playlists_ui.md` and the mockups `playlist.html`, `liked.html` |
 | Branch | `abhinavp06/PLAYLISTS` (both repos; started from `abhinavp06/PLAYER` while the `v0.3.0` PRs are open) |
 | Engine | `player` (it already keeps per-file likes; playlists are the user's other say in what plays) |
 
@@ -13,6 +13,12 @@ The user's choices (2026-10-03):
 - **Manual playlists:** create, rename, delete; add tracks or albums; reorder; remove.
 - **Liked songs:** a built-in list, from the likes `player_items.liked_ns` already stores.
 - **Not now:** smart playlists, M3U import and export, the "Resume" section (after the user's week of use).
+
+## 1a. The user's review (2026-10-03)
+
+- **No "add a whole album"** ("I will never add a full album to a playlist"): tracks are added one at a time, or a whole queue.
+- **The user's own order of playlists:** drag to reorder. Some playlists can be **pinned**; pinned ones come first, in their own order. Liked Songs always stays on top (it isn't a row here, so it can't move).
+- **"Liked Songs"**, capitalized, is the built-in list's name (the app's).
 
 ## 2. Principles
 
@@ -30,6 +36,8 @@ CREATE TABLE player_playlists (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     name_key TEXT NOT NULL UNIQUE,        -- the name folded for comparison (case, accents)
+    pinned INTEGER NOT NULL DEFAULT 0,    -- 1: in the pinned group, shown first
+    sort INTEGER NOT NULL,                -- the user's order within its group (pinned or not)
     created_ns INTEGER NOT NULL,
     updated_ns INTEGER NOT NULL           -- last add, remove, move, or rename
 );
@@ -57,6 +65,7 @@ using PlaylistItemId = std::int64_t;
 struct Playlist {
     PlaylistId id = 0;
     std::string name;
+    bool pinned = false;
     std::int64_t created_ns = 0, updated_ns = 0;
     std::uint64_t tracks = 0;
     std::int64_t duration_ms = 0;        // the tracks' lengths, as read (0 for unknown ones)
@@ -68,8 +77,12 @@ struct PlaylistItem {
 };
 struct Added { std::uint64_t added = 0, skipped = 0, not_tracks = 0; };
 
-// Playlists, a–z by name (a person has tens or hundreds, not thousands).
+// Playlists in the user's order: pinned first, each group by `sort` (tens or hundreds, not thousands).
 Result<std::vector<Playlist>> playlists();
+// Moves a playlist to `index` within its group (pinned or not); pinning moves it to the top of the
+// pinned group, unpinning to the top of the rest. A new playlist starts at the top of the rest.
+Result<void> move_playlist(PlaylistId id, std::size_t index);
+Result<void> set_pinned(PlaylistId id, bool pinned);
 Result<Playlist> playlist(PlaylistId id);
 Result<PlaylistId> create_playlist(std::string_view name, std::int64_t now_ns);   // "" or a taken name: an error
 Result<void> rename_playlist(PlaylistId id, std::string_view name, std::int64_t now_ns);
@@ -115,6 +128,5 @@ Create, rename (case-only change allowed), and delete; empty and taken names; ad
 
 ## 7. Open items
 
-- **Sort order of playlists:** a–z for now; "recently played" may suit daily use better.
 - **Moves and renames of files:** a moved file is a new entry (move detection isn't built), so it drops out of playlists. When file phase 3 (moves) lands, its rows should follow.
 - **Allowing duplicates:** a later option if wanted.
