@@ -293,6 +293,7 @@ CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 - **To check on the user's Windows build,** whose libmpv is a 2026 build with possibly different defaults (scaler, dithering, "fast" profile):
   - `Outputs::log_file` makes mpv write its log, which says which decoder, hardware decoding, scalers, and dithering it used.
   - Downscaling a 4K file to a 1440p window with a cheap scaler would also read as grain.
+- **The user's comparison (2026-10-03):** the same video in Plex looks the same, so the grain is in the video itself. Parked; nothing to change now.
 - **Possible remedies, after the log:** pin the scalers and the dither mode as `player::Settings` (a quality preset), or a 10-bit surface. Not decided.
 
 ## 11. Not in this feature
