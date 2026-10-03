@@ -52,7 +52,8 @@
 - **One playback session:** an mpv handle, configured for an embedded player: no `mpv.conf`, no key bindings, no on-screen controller, `ytdl` off.
 - **The queue:** an ordered list of entry ids and a current position. The prompt's actions: play now (clear and play), add to the end, play next (later).
 - **Transport:** play, pause, toggle, stop, seek (absolute or relative), next, previous (previous restarts the track after 3 s, a setting), volume, and mute.
-- **Tracks:** the audio and subtitle tracks of the playing file (embedded, plus external `.srt`/`.ass` next to it, which mpv loads with `sub-auto=fuzzy`), and choosing one.
+- **Tracks:** the audio and subtitle tracks of the playing file (embedded, plus external `.srt`/`.ass` next to it, which mpv loads with `sub-auto=fuzzy`), and choosing one. `Track::forced` marks subtitles that only cover foreign-language lines.
+- **Subtitles on by default** (the user, 2026-10-03: "I watch almost all my media with subtitles"): `subtitles_on`, below.
 - **State to the caller:** what's playing, paused or loading, position and duration, the track lists, errors, and the queue's changes. Callbacks run on the player's thread; TYLI forwards them to its UI thread, as it does for `SyncWorker`.
 - **Per-entry state:** saving the position, viewed, play counts, and likes in its own tables.
 - **Video frames:** handing them to whoever draws them (§4.5).
@@ -212,7 +213,7 @@ CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 | `hardware_decoding` | true | `hwdec=auto-safe`, or `no` |
 | `audio_languages` | `""` | preferred audio languages, e.g. `jpn,eng` (mpv `alang`) |
 | `subtitle_languages` | `""` | preferred subtitle languages (mpv `slang`) |
-| `subtitles_on` | false | show subtitles by default |
+| `subtitles_on` | **true** (since 2026-10-03; was false) | show subtitles by default: a track in `subtitle_languages`, else the first full track (a forced one only if there's nothing else), embedded or next to the file. Picked when a file loads, so turning them off on the video page stays off for that file. Player migration 2 forgets a stored old default |
 | `previous_restarts_after_seconds` | 3 | "previous" restarts the track when it's past this |
 | `progress_save_seconds` | 10 | |
 | `resume_min_seconds` | 60 | |

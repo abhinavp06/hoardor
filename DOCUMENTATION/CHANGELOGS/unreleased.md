@@ -2,6 +2,34 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Subtitles on by default, the first full track (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** The user: "by default select the first available subtitle file.. I watch almost all my media with subtitles".
+- **Before:** `subtitles_on` was off by default. Even on, mpv's `sid=auto` picks only a track in the preferred languages or one flagged default, so most files showed none.
+
+**What changed:**
+- **`player::Settings::subtitles_on` defaults to true.**
+- **The first full track:** when a file has loaded with subtitles on and mpv picked none, the player selects the first subtitle track that isn't forced, or a forced one if that's all there is. Embedded tracks count, and so does a `.srt`/`.ass` next to the file (`sub-auto=fuzzy`).
+  - Forced tracks are skipped because they only cover foreign-language lines; a remux often lists one first.
+  - A track in `subtitle_languages` still wins (mpv's own choice is kept).
+  - It runs only when a file loads, so turning subtitles off on the video page stays off for that file.
+- **`Track::forced`** (mpv's `forced` flag).
+- **Player migration 2** deletes a stored `subtitles_on = 0`.
+  - Why: the player saves every setting with each volume change, so most libraries held the old default, though nobody could have chosen it (TYLI has no switch yet).
+  - It runs once, so a later "off" sticks.
+
+**Tests:** 232 pass (+4):
+- `PlayerTest.SubtitlesStartOnWithTheFirstFullTrack`: forced first, then full tracks; off stays off
+- `SubtitlesFromAFileNextToTheVideoAndPreferredLanguagesWin`: an external `.srt` only; the preferred language over the first track
+- `SubtitlesOffMeansNone`
+- `PlayerLibraryTest.MigrationTwoTurnsSubtitlesOnUnlessChosenSince`
+
+**Files:**
+- `include/hoardor/player/player.hpp`, `src/player/{player,library}.cpp`, `tests/player/{player_test,library_test}.cpp`
+- `DOCUMENTATION/application/{features/player.md, DATABASE.md, CODE_TREE.md, CODE_TREE.html}`
+
+**Follow-up:** a subtitles switch and preferred languages in TYLI's settings (every hoardor setting editable in the UI).
+
 ### Frame tests encode with mpeg4 (2026-10-03, branch `abhinavp06/PLAYER`)
 
 `tests/video/frame_test.cpp` makes its clips with `mpeg4`, ffmpeg's built-in encoder, instead of `libx264`, which LGPL builds (as on Windows) don't have. TYLI's CI hit this in its own poster test. The older video tests still use `libx264`; they only run on Linux for now. Switch them when hoardor's tests run on Windows (the HDR ones need a 10-bit encoder).

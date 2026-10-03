@@ -180,7 +180,7 @@ hoardor/
 │   │       ├── struct ItemState                { entry, position_ms, duration_ms, viewed, play_count, last_played_ns, liked_ns } .liked()
 │   │       ├── class Library                   player_items + player_settings on one connection
 │   │       │   └── open · state · states(entries) · set_liked · save_position · count_play · load_settings · save_settings
-│   │       ├── enum State / struct Track / struct Status   Idle|Loading|Playing|Paused · audio/subtitle tracks · what's loaded, position, volume, tracks
+│   │       ├── enum State / struct Track / struct Status   Idle|Loading|Playing|Paused · audio/subtitle tracks (+ forced) · what's loaded, position, volume, tracks
 │   │       ├── using Resolver / struct Callbacks / struct Outputs   entry -> path (player thread) · status, position, queue, error · audio/video "auto"/"null", log_file
 │   │       ├── class VideoRenderer             mpv's OpenGL render API: create(get_proc_address) · render(fbo, w, h, flip) · destroy · set_update_callback
 │   │       └── class Player                    one session on its own thread; every command posted to it
@@ -302,7 +302,7 @@ hoardor/
 │       ├── playback.cpp                        file_resolver
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 228 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 232 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -401,13 +401,15 @@ hoardor/
 │   │       └── playback + relocation           ResolveForPlayback, ManualRelocationWithMarker, ManualRelocationRefusesAnotherRootsFolder,
 │   │                                           ManualRelocationWithoutMarkerChecksASample, UnreadableSubfolderKeepsItsEntries
 │   ├── player/
-│   │   ├── library_test.cpp                    6 TESTs (PlayerLibraryTest): StatesAreZerosUntilPlayedOrLikedInTheAskedOrder, LikeUnlikeLikeAgain,
-│   │   │                                       ViewedOnlyEverTurnsOn, PlaysAreCounted, SettingsRoundTripWithLimitsAndBadValues, ARowGoesWithItsEntry
-│   │   └── player_test.cpp                     13 TESTs (PlayerTest, real libmpv headless + generated files): PlaysTheQueueInOrderAndCountsEachPlay, MpvWritesItsLogWhenAsked,
+│   │   ├── library_test.cpp                    7 TESTs (PlayerLibraryTest): StatesAreZerosUntilPlayedOrLikedInTheAskedOrder, LikeUnlikeLikeAgain,
+│   │   │                                       ViewedOnlyEverTurnsOn, PlaysAreCounted, SettingsRoundTripWithLimitsAndBadValues, ARowGoesWithItsEntry,
+│   │   │                                       MigrationTwoTurnsSubtitlesOnUnlessChosenSince
+│   │   └── player_test.cpp                     16 TESTs (PlayerTest, real libmpv headless + generated files): PlaysTheQueueInOrderAndCountsEachPlay, MpvWritesItsLogWhenAsked,
 │   │                                           PromptActionsAddAndClearAndPlay, AnOfflineFileIsReportedOnceAndSkipped, NothingPlayableStopsInsteadOfLooping,
 │   │                                           ACorruptFileIsSkipped, PauseSeekPreviousAndNext, VideoResumesUntilViewed, MusicStartsAtTheBeginningByDefault,
 │   │                                           VolumeAndMuteAreRemembered, CommandsReturnAtOnceWhileADriveSpinsUp, RemovingTheNextOrTheCurrentItem,
-│   │                                           MastersResolverSaysOfflineAndMissing
+│   │                                           MastersResolverSaysOfflineAndMissing, SubtitlesStartOnWithTheFirstFullTrack,
+│   │                                           SubtitlesFromAFileNextToTheVideoAndPreferredLanguagesWin, SubtitlesOffMeansNone
 │   └── master/
 │       ├── metadata_pass_test.cpp              8 TESTs (MetadataPassTest, real files): TwoDrivesSyncAndReadInParallel, OneDriveAtATimeWhenTheSettingSaysSo, ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
 │       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, EachMovieFindsItsPosterInAFlatFolder, CancelStopsThePassAndTheRestWaits

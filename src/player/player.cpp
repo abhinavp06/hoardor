@@ -302,6 +302,7 @@ struct Player::Impl {
             track.codec = text_of(member(t, "codec"));
             track.channels = static_cast<int>(int_of(member(t, "demux-channel-count")));
             track.external = flag_of(member(t, "external"));
+            track.forced = flag_of(member(t, "forced"));
             track.selected = flag_of(member(t, "selected"));
             if (type == "audio") audio.push_back(std::move(track));
             else if (type == "sub") subtitles.push_back(std::move(track));
@@ -343,6 +344,29 @@ struct Player::Impl {
         }
     }
 
+    // Subtitles on, and mpv picked none (no track in the preferred languages, none flagged
+    // default): the first full track, else a forced one. Only when a file loads, so turning them
+    // off on the video page stays off.
+    void pick_subtitle() {
+        std::optional<int> pick;
+        {
+            std::lock_guard lock(state_mutex);
+            for (const Track& t : status.subtitles) {
+                if (t.selected) return;
+            }
+            for (const Track& t : status.subtitles) {
+                if (!t.forced) {
+                    pick = t.id;
+                    break;
+                }
+            }
+            if (!pick && !status.subtitles.empty()) pick = status.subtitles.front().id;
+        }
+        if (!pick) return;
+        std::int64_t id = *pick;
+        mpv_set_property(mpv, "sid", MPV_FORMAT_INT64, &id);
+    }
+
     void on_file_loaded() {
         // The track list now, to know whether there's a picture (resume is for video by default).
         mpv_node list{};
@@ -350,6 +374,7 @@ struct Player::Impl {
             read_tracks(list);
             mpv_free_node_contents(&list);
         }
+        if (settings.subtitles_on) pick_subtitle();
         double duration = 0;
         if (mpv_get_property(mpv, "duration", MPV_FORMAT_DOUBLE, &duration) >= 0) duration_ms = std::llround(duration * 1000);
         int paused = 0;

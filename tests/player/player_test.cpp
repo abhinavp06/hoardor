@@ -103,6 +103,40 @@ protected:
                                      "-pix_fmt yuv420p -c:a aac " + test::quoted((dir.path() / "music" / name).string())));
     }
 
+    // A video with subtitle tracks: each {language, forced}, in order; `srt_next_to`: also an
+    // external "<name>.srt" (mpv loads it with sub-auto).
+    void subtitled_clip(const std::string& name, const std::vector<std::pair<std::string, bool>>& tracks, bool srt_next_to = false) {
+        const fs::path folder = dir.path() / "music";
+        fs::create_directories(folder);
+        const fs::path srt = dir.path() / "line.srt";
+        std::ofstream(srt) << "1\n00:00:00,000 --> 00:00:03,000\nHello\n";
+        std::string inputs = "-f lavfi -t 3 -i testsrc=size=64x48:rate=10 -f lavfi -t 3 -i anullsrc=r=48000:cl=stereo";
+        std::string maps = "-map 0:v -map 1:a";
+        for (std::size_t i = 0; i < tracks.size(); ++i) {
+            inputs += " -i " + test::quoted(srt.string());
+            maps += " -map " + std::to_string(i + 2) + ":s -metadata:s:s:" + std::to_string(i) + " language=" + tracks[i].first +
+                    " -disposition:s:" + std::to_string(i) + (tracks[i].second ? " forced" : " 0");
+        }
+        const fs::path out = folder / name;
+        ASSERT_TRUE(test::run_ffmpeg(inputs + " " + maps + " -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -c:s srt " +
+                                     test::quoted(out.string())));
+        if (srt_next_to) fs::copy_file(srt, folder / (out.stem().string() + ".srt"), fs::copy_options::overwrite_existing);
+    }
+
+    // The subtitle track the player shows once the file has loaded (nullopt: none).
+    std::optional<player::Track> shown_subtitle(Recorder& r) {
+        std::optional<player::Track> shown;
+        eventually([&] {
+            const auto s = r.status();
+            if (s.state != State::Playing || s.subtitles.empty()) return false;
+            for (const auto& t : s.subtitles) {
+                if (t.selected) shown = t;
+            }
+            return shown.has_value();
+        });
+        return shown;
+    }
+
     // Adds the music folder as a root and syncs it: every file gets an entry id.
     void sync() {
         if (!root) {
@@ -385,6 +419,67 @@ TEST_F(PlayerTest, MpvWritesItsLogWhenAsked) {
     std::ifstream in(log);
     const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     EXPECT_NE(text.find("a.flac"), std::string::npos);   // what it opened, and how
+}
+
+TEST_F(PlayerTest, SubtitlesStartOnWithTheFirstFullTrack) {
+    // A forced track (foreign lines only) first, then a full one: the full one shows.
+    subtitled_clip("film.mkv", {{"eng", true}, {"fre", false}, {"deu", false}});
+    sync();
+    Recorder r;
+    auto p = start(r);
+    p->play_now({ids["film.mkv"]});
+    const auto shown = shown_subtitle(r);
+    ASSERT_TRUE(shown.has_value());
+    EXPECT_EQ(shown->language, "fre");
+    EXPECT_FALSE(shown->forced);
+
+    // Turned off on the video page: it stays off for this file.
+    p->select_subtitle(std::nullopt);
+    ASSERT_TRUE(eventually([&] {
+        const auto s = r.status();
+        return std::none_of(s.subtitles.begin(), s.subtitles.end(), [](const player::Track& t) { return t.selected; });
+    }));
+}
+
+TEST_F(PlayerTest, SubtitlesFromAFileNextToTheVideoAndPreferredLanguagesWin) {
+    subtitled_clip("plain.mkv", {}, true);              // only an external .srt
+    subtitled_clip("both.mkv", {{"fre", false}, {"eng", false}});
+    sync();
+    {
+        auto items = player::Library::open(*db);
+        player::Settings s = player::Settings::defaults();
+        s.subtitle_languages = "eng";
+        ASSERT_TRUE(items->save_settings(s));
+    }
+    Recorder r;
+    auto p = start(r);
+    p->play_now({ids["plain.mkv"]});
+    const auto external = shown_subtitle(r);
+    ASSERT_TRUE(external.has_value());
+    EXPECT_TRUE(external->external);
+
+    p->play_now({ids["both.mkv"]});
+    ASSERT_TRUE(eventually([&] { return r.status().entry == ids["both.mkv"]; }));
+    const auto preferred = shown_subtitle(r);
+    ASSERT_TRUE(preferred.has_value());
+    EXPECT_EQ(preferred->language, "eng");   // the preferred language, not the first track
+}
+
+TEST_F(PlayerTest, SubtitlesOffMeansNone) {
+    subtitled_clip("film.mkv", {{"eng", false}});
+    sync();
+    {
+        auto items = player::Library::open(*db);
+        player::Settings s = player::Settings::defaults();
+        s.subtitles_on = false;
+        ASSERT_TRUE(items->save_settings(s));
+    }
+    Recorder r;
+    auto p = start(r);
+    p->play_now({ids["film.mkv"]});
+    ASSERT_TRUE(eventually([&] { return r.status().state == State::Playing && !r.status().subtitles.empty(); }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    for (const auto& t : r.status().subtitles) EXPECT_FALSE(t.selected);
 }
 
 TEST_F(PlayerTest, MastersResolverSaysOfflineAndMissing) {

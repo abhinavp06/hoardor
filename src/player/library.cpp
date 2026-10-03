@@ -26,7 +26,14 @@ CREATE INDEX player_items_liked ON player_items (liked_ns) WHERE liked_ns > 0;
 CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 )sql";
 
-constexpr std::array<db::Migration, 1> migrations{{{1, schema_v1}}};
+// Subtitles became on by default (2026-10-03). The player saves every setting when the volume
+// changes, so most libraries hold the old default ("0") without anyone having chosen it (TYLI
+// had no switch for it): forget it once, so the new default applies.
+constexpr std::string_view schema_v2 = R"sql(
+DELETE FROM player_settings WHERE key = 'subtitles_on' AND value = '0';
+)sql";
+
+constexpr std::array<db::Migration, 2> migrations{{{1, schema_v1}, {2, schema_v2}}};
 
 Error database_error(const db::Error& error) { return Error{error.message}; }
 

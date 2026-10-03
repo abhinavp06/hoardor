@@ -35,7 +35,10 @@ struct Settings {
     bool hardware_decoding = true;      // hwdec=auto-safe, or no
     std::string audio_languages;        // preferred, e.g. "jpn,eng" (mpv alang); "" = the file's default
     std::string subtitle_languages;     // (mpv slang)
-    bool subtitles_on = false;          // show subtitles by default
+    // Show subtitles by default (the user, 2026-10-03: "I watch almost all my media with
+    // subtitles"): a track in `subtitle_languages` if there is one, else the first full track
+    // (not a "forced" one, which only covers foreign-language lines), embedded or a file next to it.
+    bool subtitles_on = true;
     int previous_restarts_after_seconds = 3;
     int progress_save_seconds = 10;
     int resume_min_seconds = 60;
@@ -104,6 +107,7 @@ struct Track {
     std::string codec;         // "truehd", "subrip", …
     int channels = 0;          // audio only
     bool external = false;     // a .srt/.ass next to the file
+    bool forced = false;       // subtitles only for foreign-language lines
     bool selected = false;
 };
 

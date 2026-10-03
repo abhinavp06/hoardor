@@ -97,6 +97,24 @@ TEST_F(PlayerLibraryTest, SettingsRoundTripWithLimitsAndBadValues) {
     EXPECT_EQ(items->load_settings()->viewed_percent, 90);
 }
 
+TEST_F(PlayerLibraryTest, MigrationTwoTurnsSubtitlesOnUnlessChosenSince) {
+    EXPECT_TRUE(items->load_settings()->subtitles_on);   // the default since 2026-10-03
+    // A database from before: the old default saved along with the volume.
+    player::Settings old = player::Settings::defaults();
+    old.subtitles_on = false;
+    old.volume = 70;
+    ASSERT_TRUE(items->save_settings(old));
+    ASSERT_TRUE(db->exec("UPDATE db_migrations SET version = 1 WHERE component = 'player'"));
+    ASSERT_TRUE(player::Library::open(*db).has_value());
+    const auto now = items->load_settings().value();
+    EXPECT_TRUE(now.subtitles_on);
+    EXPECT_EQ(now.volume, 70);   // everything else kept
+    // Turned off after that: it stays off (the migration runs once).
+    ASSERT_TRUE(items->save_settings(old));
+    ASSERT_TRUE(player::Library::open(*db).has_value());
+    EXPECT_FALSE(items->load_settings()->subtitles_on);
+}
+
 TEST_F(PlayerLibraryTest, ARowGoesWithItsEntry) {
     player::EntryId a = 0;
     for (const auto& e : all_entries(root)) {
