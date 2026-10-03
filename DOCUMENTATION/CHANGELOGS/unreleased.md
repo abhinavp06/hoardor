@@ -2,6 +2,15 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### ThreadSanitizer with the player (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** The follow-up from the entry below. The whole suite now runs clean under ThreadSanitizer, the player's threads included: 0 warnings, 209 pass, and 3 permission tests skip as root.
+- **What came up:** 13 reports, every one with frames only inside libmpv, libavcodec, and libavutil. ffmpeg's frame-threaded decoders hand buffers over with atomics in code built without ThreadSanitizer, so the tool can't see that synchronization.
+- **What changed:** `tests/tsan.supp` suppresses those three modules. The suppression matches by module, so a race with a hoardor frame would still show.
+- **Build notes** (`CLAUDE.md`): the ThreadSanitizer build itself needs `setarch -R`. CMake's test discovery runs the binary, and deletes it when that run fails.
+
+**Files:** `tests/tsan.supp`, `CLAUDE.md`, `DOCUMENTATION/application/ARCHITECTURE.md` (§7)
+
 ### FLACs with an unknown length were rejected; sanitizer run; docs audit (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** The user asked whether every document keeps up with the features. The audit included running the suite under AddressSanitizer, which had not been done since the player arrived. That run failed one test, `AudioRead.EmbeddedCover`, and the failure was a real bug.
