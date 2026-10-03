@@ -2,6 +2,26 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Benchmarks: what a search keystroke costs (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** The user found TYLI's search slow, so the 50k-track audio benchmark gained:
+- **`BM_SearchKeystroke`:** what TYLI's results page asked per keystroke. Albums and artists, each a count and a first page; tracks, a count and a first page by title.
+- **`BM_SearchPart`:** each of those parts on its own.
+
+**Results** (Release, this VM, 50k tracks):
+
+| Text | Per keystroke |
+|---|---|
+| "t", "tr", "track", "track 1" | about 0.51–0.54 s ("t" matches every "Track N") |
+| "artist 3" | 293 ms |
+| "album 61" | 25 ms |
+
+The parts, for "track": album count 125 ms, album page 104 ms, track count 60 ms, track page by title 53 ms, unordered 20 ms.
+
+**Consequence:** TYLI moved search off its UI thread (TYLI's changelog). No hoardor query changed.
+
+**Files:** `benchmarks/audio/query_benchmark.cpp`, `DOCUMENTATION/application/{CODE_TREE.md, CODE_TREE.html}`
+
 ### Player phase 3: video frames drawn by TYLI (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** No engine code changed. TYLI's `VideoView` now draws mpv's frames through `player::VideoRenderer` (TYLI's changelog).

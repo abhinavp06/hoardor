@@ -411,7 +411,9 @@ hoardor/
 │   ├── audio/
 │   │   └── query_benchmark.cpp                 catalog(): N synthetic tracks (10/album, 20 albums/artist, 40 genres) stored via audio::Library;
 │   │                                           BM_AlbumsFirstPageByName, BM_AlbumsMiddlePageByName, BM_AlbumsFirstPageNewestAdded, BM_AlbumsOfAGenre,
-│   │                                           BM_TracksOfAnAlbum, BM_TracksMiddlePageByTitle, BM_AlbumCount, BM_TrackCount, BM_PendingCountWhenNothingIsPending
+│   │                                           BM_TracksOfAnAlbum, BM_TracksMiddlePageByTitle, BM_AlbumCount, BM_TrackCount, BM_PendingCountWhenNothingIsPending,
+│   │                                           BM_SearchKeystroke/0..5 (what TYLI's search asks per keystroke, for "t" … "album 61"),
+│   │                                           BM_SearchPart/0..4 (its parts: album count/page, track count/page by title/unordered)
 │   └── file/
 │       ├── scanner_benchmark.cpp               BM_Scan: full scan of the tree
 │       └── sync_benchmark.cpp                  struct Synced, fn fresh_library() (DB file + Library + one root, settle window 0);
