@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Phases 1–4 built** (2026-10-03, §10a); phase 5 (the Windows test, OI-1) waits for the user. Approved 2026-10-03 ("looks good", plus the like heart, §1) |
+| Status | **Shipped in `v0.3.0`** (2026-10-03) with TYLI `v0.3.0`: phases 1–4 built (§10a) and tested by the user on Windows. Open: OI-1 (a sync on the same HDD while a movie plays). Approved 2026-10-03 ("looks good", plus the like heart) |
 | Branch | `abhinavp06/PLAYER` (one PR; pairs with TYLI's branch of the same name) |
 | Ships in | `v0.3.0` |
 | Engines involved | **`player`** (new: playback through libmpv, the queue, progress and viewed state), `file` (`resolve(entry)`, already there), `master` (nothing in the first draft; yielding a sync to playback is OI-1, later), `db` (nothing new) |

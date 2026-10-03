@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Built** (2026-10-03) on `abhinavp06/PLAYER`; waiting for the user's Windows test with their Plex |
+| Status | **Shipped in `v0.3.0`** (2026-10-03), with TYLI `v0.3.0`; tested by the user on Windows |
 | Engines | `video` (new: `PlexPosters`, `grab_frame`, `Group::first_entry`); TYLI's thumbnail cache uses them |
 | Asked by | The user's Windows tests (2026-10-03): most movies and shows had no poster, even after the companion fix |
 
