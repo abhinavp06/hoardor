@@ -23,7 +23,7 @@ Rationale:
 hoardor is divided into engines, each in its own namespace with its own rules:
 
 - `file`: library roots and their identity, on-demand scanning, change detection, and resolving files to paths.
-- `audio`, `video`, `graphics`, `text`: planned.
+- `audio`, `video`: metadata (built in `v0.2.0`). `player`: playback through libmpv (designed 2026-10-03, `engines/player.md`). `graphics`, `text`: planned.
 - `master`: orchestrates the other engines.
 - `db`: **infrastructure, not a feature engine**. See §3.
 - `core`: **infrastructure, not a feature engine**. Shared building blocks such as an event bus, ring buffers, and queues. Plain standard C++ with no third-party dependencies. See below.
@@ -148,3 +148,5 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
 | 2026-10-02 | `DATABASE.md` is the single reference for every table, column, index, and migration. Feature docs propose schema changes, and `DATABASE.md` is updated when they're built. |
 | 2026-10-02 | Sync and metadata reading run **one worker per physical drive** (`file::device_of`: Linux block device, Windows disk number), up to `parallel_devices` (default 4), each on its own SQLite connection. This implements §6's "parallelism per physical device". Several workers per SSD are not done yet. ThreadSanitizer runs with `tests/tsan.supp` (SQLite's lock-free WAL index). |
 | 2026-10-03 | No Books category by default until text has its own build (the user). File migration 3 deletes the seeded one only when untouched (no folders, default kinds). Text stays a supported file kind, and a Books category can be added by hand. |
+| 2026-10-03 | **The player runs on libmpv** (the user's choice over Qt Multimedia in TYLI, and over our own ffmpeg + miniaudio), wrapped by a new engine `hoardor::player` with no Qt. Video frames go through mpv's OpenGL render API to the app. The queue holds entry ids, resolved one at a time through an injected resolver. *Proposed, pending approval of `features/player.md`:* the rest of the design. |
+
