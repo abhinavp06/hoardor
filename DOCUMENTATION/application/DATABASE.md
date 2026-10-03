@@ -5,7 +5,7 @@ The one place that describes **every table in hoardor's SQLite database**: what 
 - **Mechanics** (connections, pragmas, statements, transactions, the migration runner) are in `engines/db.md`.
 - **Why one database, and who owns which tables:** `ARCHITECTURE.md` §3.
 
-Status: `v0.1.0` (file migration 1), plus Media library v1 built on `abhinavp06/MEDIA_LISTING`: file migration 2, audio migrations 1–2, video migrations 1–3.
+Status: `v0.1.0` (file migration 1), plus Media library v1 built on `abhinavp06/MEDIA_LISTING`: file migrations 2–3, audio migrations 1–2, video migrations 1–3.
 
 ## 1. Rules
 
@@ -104,7 +104,7 @@ Seeded by migration 1, all editable and deletable:
 - Music: `audio,image`
 - Movies: `video,subtitle,image`, plus `info` since migration 2
 - Shows: `video,subtitle,image`, plus `info` since migration 2
-- Books: `text,image`
+- Books: `text,image`, removed again by migration 3 when untouched (same kinds, no folders), since text has no build yet (the user, 2026-10-03)
 
 A category with roots can't be deleted (`InUse`).
 
@@ -250,6 +250,7 @@ Names no track uses are deleted at the end of each metadata pass (`remove_unused
 | `video` | 1 | (v0.2.0, Media library v1) | `video_items`, `video_names`, `video_item_names` and their indexes |
 | `audio` | 2 | (v0.2.0, Media library v1) | `audio_search` FTS5 table (backfilled) and its three triggers |
 | `video` | 2 | (v0.2.0, Media library v1) | `video_search` FTS5 table (backfilled) and its three triggers |
+| `file` | 3 | (v0.2.0, Media library v1) | Deletes the seeded Books category if it's untouched: name `Books`, kinds `text,image`, and no roots. One with folders or changed kinds stays (2026-10-03) |
 | `video` | 3 | (v0.2.0, Media library v1) | `UPDATE video_items SET source_size = -1`: every video is read once more, because companions used to stop at the first 200 files of a folder and most movies in a big shared folder lost their poster and `.nfo` (2026-10-03). The rows stay listed until re-read |
 
 ## 5. Proposed (not built)

@@ -143,7 +143,14 @@ UPDATE file_settings SET value = value || char(10) || 'nfo=info'
     WHERE key = 'extension_kinds' AND value <> '' AND (char(10) || value) NOT LIKE '%' || char(10) || 'nfo=%';
 )sql";
 
-constexpr std::array<db::Migration, 2> migrations{{{1, schema_v1}, {2, schema_v2}}};
+// No Books category until text gets its own build (the user, 2026-10-03). Only the untouched
+// default goes: one with folders, or with kinds the user changed, is theirs and stays.
+constexpr std::string_view schema_v3 = R"sql(
+DELETE FROM file_categories
+    WHERE name = 'Books' AND kinds = 'text,image' AND id NOT IN (SELECT category_id FROM file_roots);
+)sql";
+
+constexpr std::array<db::Migration, 3> migrations{{{1, schema_v1}, {2, schema_v2}, {3, schema_v3}}};
 
 // ---------------------------------------------------------------- Settings (de)serialization
 

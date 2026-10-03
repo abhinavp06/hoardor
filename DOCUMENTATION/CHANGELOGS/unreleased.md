@@ -2,6 +2,24 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### No Books category by default (2026-10-03, branch `abhinavp06/MEDIA_LISTING`)
+
+**Summary:** The user asked to remove Books from TYLI's sidebar and Settings. Text has no build yet (books and blogs are a separate, unplanned build), so an empty Books section only gets in the way.
+- **File migration 3** deletes the seeded Books category when it's untouched: name `Books`, kinds `text,image`, and no folders. A Books category with folders, or with kinds the user changed, stays.
+- **New libraries** still get Books from migration 1 (a shipped migration is never edited), and migration 3 removes it right after, so they start with Music, Movies, and Shows.
+- `FileKind::Text` and its extensions are unchanged. A Books category can be added again by hand at any time.
+
+**Decision:** delete the category rather than hide it in TYLI. A hidden category would still be data with no use, and TYLI would need a rule for which categories to hide.
+
+**Tests:** 192 pass.
+- `FileMigration.TheDefaultBooksCategoryGoesUnlessItIsInUseOrChanged`: the default goes; one with a folder stays; one with changed kinds stays.
+- **Updated:** the tests that used the seeded Books (`LibraryTest`'s seeded categories, reopening, renaming clashes, moving a root, and `SyncTest.ChangingTheCategoryAppliesItsKinds`, which now adds its own Books).
+
+**Files**
+- `src/file/library.cpp`
+- `tests/file/{library_test,sync_test,migration_test}.cpp`
+- `DOCUMENTATION/application/{ARCHITECTURE.md, DATABASE.md, CODE_TREE.md, CODE_TREE.html, engines/file.md}`
+
 ### Videos find their own poster and .nfo in big folders (2026-10-03, branch `abhinavp06/MEDIA_LISTING`)
 
 **Summary:** The user's Windows test: "movie and TV show covers aren't being rendered for the majority of the media. Music albums seem to work fine."

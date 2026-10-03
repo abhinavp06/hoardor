@@ -95,3 +95,29 @@ TEST(FileMigration, AUserMappingOfNfoIsKept) {
     ASSERT_TRUE(library.has_value());
     EXPECT_EQ(library->load_settings().value().extension_kinds.at("nfo"), FileKind::Text);
 }
+
+TEST(FileMigration, TheDefaultBooksCategoryGoesUnlessItIsInUseOrChanged) {
+    {
+        db::Database database = v1_library();
+        auto library = Library::open(database);
+        ASSERT_TRUE(library.has_value());
+        const auto categories = library->categories().value();
+        ASSERT_EQ(categories.size(), 3u);
+        EXPECT_EQ(categories[2].name, "Shows");
+    }
+    {  // a folder in Books: it's the user's now
+        db::Database database = v1_library();
+        ASSERT_TRUE(database.exec("INSERT INTO file_roots (id, uuid, category_id, name, path, path_in_volume, use_marker, "
+                                  "case_sensitive) VALUES (2, 'u-2', 4, 'Books', '/b', 'b', 0, 1)"));
+        auto library = Library::open(database);
+        ASSERT_TRUE(library.has_value());
+        EXPECT_EQ(library->categories().value().size(), 4u);
+    }
+    {  // kinds the user changed
+        db::Database database = v1_library();
+        ASSERT_TRUE(database.exec("UPDATE file_categories SET kinds = 'text' WHERE name = 'Books'"));
+        auto library = Library::open(database);
+        ASSERT_TRUE(library.has_value());
+        EXPECT_EQ(library->categories().value().size(), 4u);
+    }
+}

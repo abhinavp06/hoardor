@@ -299,7 +299,9 @@ TEST_F(SyncTest, ChangingTheCategoryAppliesItsKinds) {
     const Root root = add_music();
     library->sync_root(root.id);
     EXPECT_EQ(paths(root.id), (std::set<std::string>{"song.mp3"}));
-    ASSERT_TRUE(library->set_root_category(root.id, category("Books")));
+    const auto books = library->add_category("Books", {FileKind::Text});
+    ASSERT_TRUE(books.has_value());
+    ASSERT_TRUE(library->set_root_category(root.id, *books));
     library->sync_root(root.id);
     EXPECT_EQ(paths(root.id), (std::set<std::string>{"notes.txt"}));
 }

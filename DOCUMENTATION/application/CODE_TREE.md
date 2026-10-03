@@ -274,7 +274,7 @@ hoardor/
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 191 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 192 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -348,8 +348,8 @@ hoardor/
 │   │   ├── companions_test.cpp                 9 TESTs (class CompanionsTest): OneEntryById, ImagesNextToATrackButNotInOtherFolders,
 │   │   │                                       AVideosNfoSubtitlesAndTheShowsFilesTwoLevelsUp, FilesDirectlyInTheRoot, CaseInsensitiveRootsAndTheLimit, UnknownEntry,
 │   │   │                                       PrefixesFindAMoviesSidecarsInAFlatFolderOfHundreds, PrefixesNearestFolderFirstAndEachFileOnce, PrefixesMatchCommonSpellings
-│   │   ├── migration_test.cpp                  4 TESTs: FileMigration.{AV010LibraryKeepsItsEntriesAndGetsAddedTimes, VideoCategoriesGainInfoOnce,
-│   │   │                                       SavedExtensionMapGainsNfo, AUserMappingOfNfoIsKept}
+│   │   ├── migration_test.cpp                  5 TESTs: FileMigration.{AV010LibraryKeepsItsEntriesAndGetsAddedTimes, VideoCategoriesGainInfoOnce,
+│   │   │                                       SavedExtensionMapGainsNfo, AUserMappingOfNfoIsKept, TheDefaultBooksCategoryGoesUnlessItIsInUseOrChanged}
 │   │   └── sync_test.cpp                       30 TESTs (class SyncTest : LibraryTest; .put(relative, size, mtime), .add_music(use_marker), .music(), .paths(root))
 │   │       ├── basics                          FirstSyncAddsMediaOfTheCategoryKindsOnly, AddedTimeIsSetOnceAndSurvivesChanges, SecondSyncChangesNothing,
 │   │       │                                   SizeOrMtimeChangesAreModificationsAndKeepTheId, DeletedFilesAreRemovedBelowTheGuard

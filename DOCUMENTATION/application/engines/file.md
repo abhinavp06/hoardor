@@ -137,7 +137,7 @@ As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANN
 - `file_info_posix.cpp` and `file_info_windows.cpp`
 - `mount_points_linux.cpp`, `mount_points_windows.cpp`, and `mount_points_other.cpp` (empty for now)
 
-**Tables** (migration 1 of component `file`): `file_settings`, `file_categories` (seeded with Music, Movies, Shows, Books), `file_roots`, `file_entries`, and `file_scan_errors`. The full schema is in `features/file_sync.md` §4.3.
+**Tables** (migration 1 of component `file`): `file_settings`, `file_categories` (seeded with Music, Movies, Shows, Books; migration 3 removes an untouched Books again, 2026-10-03), `file_roots`, `file_entries`, and `file_scan_errors`. The full schema is in `features/file_sync.md` §4.3.
 
 **Settings** (`file::Settings`, persisted one row per field in `file_settings`):
 
