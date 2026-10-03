@@ -197,7 +197,7 @@ std::string_view order_sql(GroupOrder order) {
 
 std::vector<media::Condition> conditions(const Filter& filter) {
     std::vector<media::Condition> out;
-    for (const auto& c : filter.all) out.push_back(media::Condition{int(c.field), c.value});
+    for (const auto& c : filter.all) out.push_back(media::Condition{int(c.field), c.value, c.none});
     return out;
 }
 

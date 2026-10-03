@@ -119,7 +119,7 @@ Phases 2 and 3 can swap if the user wants movies first.
 
 ## 5. Generic query API
 
-The same shape in `audio` and `video`: **filter** by fields (equality, ANDed), **order** by fields, **group** by fields with aggregates, **count**, and keyset **cursors**. No layout is built in. An "album" is just a group by (album artist, album). Field names are an enum, and SQL is built from fixed fragments, never from caller strings.
+The same shape in `audio` and `video`: **filter** by fields (equality, ANDed; or, with `Condition::none`, "has nothing in this field", added 2026-10-03 for "no director" / "no genre" sections), **order** by fields, **group** by fields with aggregates, **count**, and keyset **cursors**. No layout is built in. An "album" is just a group by (album artist, album). Field names are an enum, and SQL is built from fixed fragments, never from caller strings.
 
 ```cpp
 namespace hoardor::audio {

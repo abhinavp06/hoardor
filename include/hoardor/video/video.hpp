@@ -136,6 +136,9 @@ using Value = std::variant<std::int64_t, std::string>;
 struct Condition {
     Field field;
     Value value;  // Type: 1 movie, 2 episode
+    // Instead of `value`: items with nothing in this field (no director, no genre, an empty
+    // text, 0), e.g. the "no director" section of a grid by director.
+    bool none = false;
 };
 
 struct Filter {

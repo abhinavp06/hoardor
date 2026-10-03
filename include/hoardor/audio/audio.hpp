@@ -75,6 +75,7 @@ using Value = std::variant<std::int64_t, std::string>;
 struct Condition {
     Field field;
     Value value;
+    bool none = false;  // instead of `value`: tracks with nothing in this field (no genre, no year)
 };
 
 struct Filter {

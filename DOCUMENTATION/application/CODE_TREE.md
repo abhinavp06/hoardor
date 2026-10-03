@@ -39,7 +39,7 @@ hoardor/
 │   │       ├── fn embedded_cover(path) -> Result<bytes>      the attached picture, or empty
 │   │       ├── enum Field                      Title, Artist, AlbumArtist, Album, Genre, Year, Disc, Track, Duration, Bitrate, SampleRate,
 │   │       │                                   BitDepth, Codec, Lossless, Added, Category, Root, Entry, Search (full-text filter)
-│   │       ├── using Value · struct Condition { field, value } · struct Filter { all[] } · struct Order { field, descending }
+│   │       ├── using Value · struct Condition { field, value, none } · struct Filter { all[] } · struct Order { field, descending }
 │   │       ├── struct Track                    a stored track + root_id, root_online, added_ns, size
 │   │       ├── struct Group                    { values[], tracks, duration_ms, added_first/last_ns, year_min/max, cover_entry, any_online }
 │   │       ├── enum GroupOrder                 Values, AddedLast, Year, Tracks
@@ -64,7 +64,7 @@ hoardor/
 │   │       │                                   TEMP table keyed by the last folder + file name) · poster(video_file) -> optional<path>
 │   │       ├── enum Field                      Type, Title, Year, Genre, Director, Show, Season, Episode, Duration, Height, Hdr, VideoCodec,
 │   │       │                                   Added, Category, Root, Entry, Search (full-text filter)
-│   │       ├── Value, Condition, Filter, Order, PendingEntry   (as in audio)
+│   │       ├── Value, Condition (none: "has nothing in this field"), Filter, Order, PendingEntry   (as in audio)
 │   │       ├── struct Item                     a stored movie/episode + poster_entry, has_embedded_poster, root_id, root_online, added_ns, size
 │   │       ├── struct Group                    { values[], items, duration_ms, added_first/last_ns, year_min/max, max_height, any_hdr,
 │   │       │                                     poster_entry, embedded_poster_entry, any_online, first_entry (first real episode / any copy) }
@@ -302,7 +302,7 @@ hoardor/
 │       ├── playback.cpp                        file_resolver
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 232 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 233 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -330,10 +330,10 @@ hoardor/
 │   │   ├── read_test.cpp                       10 TESTs (VideoRead): StreamsLanguagesAndTags, HdrIsRecognized, NfoBeatsTagsAndNames_PosterIsPicked,
 │   │   │                                       EpisodeFromNamesWithTheShowsNfoAndPoster, MovieFromNameOnly, EmbeddedPosterAttachment, PosterNamedLikeTheMovie,
 │   │   │                                       EmbeddedPosterUnderOtherNamesButNeverAFont, NotAVideo; VideoCompanionPrefixes.TheFilesOwnNameThenTheCommonNames
-│   │   ├── library_test.cpp                    10 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
+│   │   ├── library_test.cpp                    11 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
 │   │                                           DirectorsGenresAndWriters, PostersComeFromCompanionImagesThatStillExist, PendingAndErrorsAndStreams,
 │   │                                           MigrationThreeReadsEveryVideoAgain, PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved,
-│   │                                           AGroupsFirstEntryIsItsFirstRealEpisode
+│   │                                           AGroupsFirstEntryIsItsFirstRealEpisode, NoDirectorOrNoGenreIsAFilterToo
 │   │   ├── frame_test.cpp                      6 TESTs (VideoFrame): AScaledStillKeepsTheShape, NeverScaledUp, ADarkIntroIsSkipped,
 │   │   │                                       AllDarkStillGivesTheLastFrame, AnamorphicVideoIsWidened, AudioOnlyOrMissingFilesFail
 │   │   └── plex_test.cpp                       8 TESTs (PlexPostersTest, a fake Plex folder): AMoviesChosenPosterEvenUnderAnotherDriveLetter,

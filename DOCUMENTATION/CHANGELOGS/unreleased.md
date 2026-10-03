@@ -2,6 +2,29 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Filters: "has nothing in this field" (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** For TYLI's movies grid "by director" and "by genre" (the user's request, mockup `movies-by.html`). Grouping by a name field joins the names, so movies without a director or genre drop out of those groups. The grid needs a "no director" section to show them.
+
+**What changed:** `Condition::none`, in `audio`, `video`, and `media`. Instead of a value, it matches items with nothing in the field:
+- **a name field** (genre, director, artist): no linked name of that kind and role (`NOT EXISTS`)
+- **a text field:** `''`
+- **a number:** `0` (an unknown year)
+- **a full-text field:** an error
+
+It combines with every other condition and works in `items`, `groups`, `count`, and `group_count`.
+
+**Tests:** 233 pass. `VideoLibraryTest.NoDirectorOrNoGenreIsAFilterToo`:
+- no director, no genre, no year
+- two `none` conditions together
+- "by director" groups leave those movies out
+- a full-text field refused
+
+**Files:**
+- `include/hoardor/{audio/audio.hpp, video/video.hpp}`, `src/media/{query.hpp, query.cpp}`, `src/{audio,video}/library.cpp`
+- `tests/video/library_test.cpp`
+- `DOCUMENTATION/application/{features/media_listing.md, CODE_TREE.md, CODE_TREE.html}`
+
 ### Subtitles on by default, the first full track (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** The user: "by default select the first available subtitle file.. I watch almost all my media with subtitles".

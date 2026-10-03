@@ -51,6 +51,7 @@ struct Schema {
 struct Condition {
     int field = 0;
     Value value;
+    bool none = false;  // instead of the value: items with nothing in this field
 };
 
 struct Order {

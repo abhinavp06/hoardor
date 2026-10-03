@@ -167,6 +167,39 @@ TEST_F(VideoLibraryTest, AGroupsFirstEntryIsItsFirstRealEpisode) {
     EXPECT_TRUE(heat[0].first_entry == ids.at("Heat 720p.mkv") || heat[0].first_entry == ids.at("Heat 1080p.mkv"));
 }
 
+TEST_F(VideoLibraryTest, NoDirectorOrNoGenreIsAFilterToo) {
+    // For a grid "by director": its sections leave out the movies without one, so the grid
+    // adds a "no director" section from this filter.
+    for (const char* f : {"Heat.mkv", "Home video.mkv", "Arrival.mkv"}) put(f);
+    sync();
+    video::VideoInfo heat = movie("Heat", 1995);
+    heat.directors = {"Michael Mann"};
+    heat.genres = {"Crime"};
+    store("Heat.mkv", heat);
+    store("Home video.mkv", movie("Home video", 0));
+    video::VideoInfo arrival = movie("Arrival", 2016);
+    arrival.genres = {"Drama"};
+    store("Arrival.mkv", arrival);
+
+    const std::vector<Field> card{Field::Title, Field::Year};
+    const std::vector<Field> by_director{Field::Director};
+    EXPECT_EQ(videos->group_count(by_director, {}).value(), 1u);   // only Michael Mann
+    const Filter no_director{{{Field::Director, Value{}, true}}};
+    const auto none = videos->groups(card, no_director).value().items;
+    ASSERT_EQ(none.size(), 2u);
+    EXPECT_EQ(none[0].values[0], "Arrival");
+    EXPECT_EQ(none[1].values[0], "Home video");
+    const Filter no_genre{{{Field::Genre, Value{}, true}}};
+    EXPECT_EQ(videos->count(no_genre).value(), 1u);
+    const Filter no_year{{{Field::Year, Value{}, true}}};
+    EXPECT_EQ(videos->count(no_year).value(), 1u);
+    // With other conditions, and on its own count.
+    const Filter both{{{Field::Director, Value{}, true}, {Field::Genre, Value{}, true}}};
+    EXPECT_EQ(videos->count(both).value(), 1u);
+    const Filter search_none{{{Field::Search, Value{}, true}}};
+    EXPECT_FALSE(videos->count(search_none).has_value());
+}
+
 TEST_F(VideoLibraryTest, DirectorsGenresAndWriters) {
     put("a.mkv");
     put("b.mkv");
