@@ -42,6 +42,9 @@ class Database {             // move-only, one connection, used by one thread at
 public:
     static Result<Database> open(const std::filesystem::path& file, Options options = {});
     static Result<Database> open_in_memory(Options options = {});
+    // Another program's database (Plex's, for posters): opened read-only, never written, never
+    // switched to WAL; TEMP tables still work (SQLite's own temporary file). Since 2026-10-03.
+    static Result<Database> open_read_only(const std::filesystem::path& file, Options options = {});
     Result<void> exec(std::string_view sql);            // one or more statements, no results
     Result<Statement> prepare(std::string_view sql);
     std::int64_t last_insert_id() const;

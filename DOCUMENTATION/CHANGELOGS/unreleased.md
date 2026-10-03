@@ -2,6 +2,34 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Docs audit: engine docs caught up; no mention of the app in hoardor's code (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** The user asked whether hoardor's APIs are still generic and every doc is current.
+
+**Checked and current:**
+- **Generic APIs:** today's additions are building blocks, not layouts:
+  - `Condition::none`, `Group::first_entry`
+  - `grab_frame`, `PlexPosters`, `open_read_only`
+  - the player's subtitle default, `Track::forced`, `Outputs::log_file`
+  - Sections, season cards, "more by" rows, and copy grouping are all built in TYLI on generic queries.
+- **`CODE_TREE.md`:** every tracked file is listed; each test file's count and the total (233) match the code.
+- **`DATABASE.md`:** the migration history matches the code (file 3, audio 3, video 3, player 2), and the diagram has every table.
+
+**Fixed:**
+- **`engines/*.md` "Current state"** hadn't caught up with today's API:
+  - `db.md`: `open_read_only`
+  - `audio.md` and `video.md`: `Condition::none`, `Group::first_entry`
+  - `player.md`: `Track::forced`, `Outputs::log_file`, the subtitle default
+  - stale "migration 1" table lines in `audio.md`, `video.md`, and `player.md`
+- **`DATABASE.md`:** notes the one database hoardor reads but doesn't own (Plex's, read-only, for posters).
+- **App names in hoardor code:**
+  - a comment in `src/player/library.cpp` and three test comments named TYLI; ARCHITECTURE §1 says hoardor never mentions the app
+  - they now say "the app"
+
+**Files:**
+- `DOCUMENTATION/application/{DATABASE.md, engines/db.md, engines/audio.md, engines/video.md, engines/player.md}`
+- `src/player/library.cpp`, `tests/{audio,video}/library_test.cpp`
+
 ### Filters: "has nothing in this field" (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** For TYLI's movies grid "by director" and "by genre" (the user's request, mockup `movies-by.html`). Grouping by a name field joins the names, so movies without a director or genre drop out of those groups. The grid needs a "no director" section to show them.

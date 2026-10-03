@@ -320,7 +320,7 @@ TEST_F(AudioLibraryTest, CopiesInTwoQualitiesAreOneGroup) {
     }
     const auto groups = all_groups({Field::AlbumArtist, Field::Album}, {}, GroupOrder::Values, false);
     ASSERT_EQ(groups.size(), 1u);
-    EXPECT_EQ(groups[0].tracks, 6u);  // grouping copies is TYLI's job
+    EXPECT_EQ(groups[0].tracks, 6u);  // grouping copies is the app's job
     // The cover comes from a track that has embedded art.
     EXPECT_EQ(groups[0].cover_entry, ids.at("hires/1.flac").id);
     EXPECT_EQ(tracks->count({{{Field::BitDepth, Value{24}}, {Field::SampleRate, Value{96000}}}}).value(), 3u);

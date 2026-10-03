@@ -27,7 +27,7 @@ CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 )sql";
 
 // Subtitles became on by default (2026-10-03). The player saves every setting when the volume
-// changes, so most libraries hold the old default ("0") without anyone having chosen it (TYLI
+// changes, so most libraries hold the old default ("0") without anyone having chosen it (the app
 // had no switch for it): forget it once, so the new default applies.
 constexpr std::string_view schema_v2 = R"sql(
 DELETE FROM player_settings WHERE key = 'subtitles_on' AND value = '0';

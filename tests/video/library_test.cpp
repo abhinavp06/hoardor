@@ -102,7 +102,7 @@ TEST_F(VideoLibraryTest, OneCardPerMovieWhateverTheCopies) {
     EXPECT_FALSE(page.items[1].any_hdr);
     EXPECT_EQ(videos->group_count(card, movies).value(), 2u);
 
-    // The movie page: its copies, best first (TYLI picks the default).
+    // The movie page: its copies, best first (the app picks the default).
     const Filter arrival{{{Field::Title, Value{"arrival"}}, {Field::Year, Value{std::int64_t{2016}}}}};
     const std::vector<video::Order> best{{Field::Height, true}};
     const auto copies = videos->items(arrival, best).value().items;
@@ -159,7 +159,7 @@ TEST_F(VideoLibraryTest, AGroupsFirstEntryIsItsFirstRealEpisode) {
     const auto shows = videos->groups(std::vector<Field>{Field::Show}, episodes).value().items;
     ASSERT_EQ(shows.size(), 1u);
     EXPECT_EQ(shows[0].first_entry, ids.at("Dark/S1E1.mkv"));
-    EXPECT_EQ(shows[0].poster_entry, 0);  // nothing else: TYLI falls back to Plex, then a frame
+    EXPECT_EQ(shows[0].poster_entry, 0);  // nothing else: the app falls back to Plex, then a frame
 
     const Filter movies{{{Field::Type, Value{std::int64_t{1}}}}};
     const auto heat = videos->groups(std::vector<Field>{Field::Title, Field::Year}, movies).value().items;

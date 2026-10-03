@@ -24,11 +24,12 @@ Status: **Phases 1–3 built** (2026-10-03, `features/player.md`): playback, the
 - **Public API:** `include/hoardor/player/player.hpp`:
   - `Settings`, `SettingLimits`, `ItemState`
   - `Library` (any connection, one thread): `open`, `state`, `states`, `set_liked`, `save_position`, `count_play`, `load_settings`, `save_settings`
-  - `State`, `Track`, `Status`, `Resolver`, `Callbacks`, `Outputs`
+  - `State`, `Track` (with `forced`), `Status`, `Resolver`, `Callbacks`, `Outputs` (audio and video output; `log_file`: mpv's own log, for diagnosing playback)
   - `VideoRenderer`: `create`, `ready`, `render`, `destroy`, `set_update_callback`
   - `Player`: `start`, the queue (`play_now`, `add`, `jump`, `remove`, `clear`, `queue`, `current`), transport (`toggle`, `pause`, `resume`, `stop`, `next`, `previous`, `seek`, `seek_by`, `set_volume`, `set_muted`, `select_audio`, `select_subtitle`), `status`, `video`
 - **`master::file_resolver(database_file)`** (`include/hoardor/master/playback.hpp`): the resolver on `file::Library::resolve`, with its own connection, and errors in words ("its drive is offline", "the file is missing").
-- **Tables:** `player_items`, `player_settings` (player migration 1, `DATABASE.md`).
+- **Subtitles** (since 2026-10-03): on by default (`Settings::subtitles_on`). A track in `subtitle_languages`, else the first one that isn't forced, embedded or next to the file, picked when a file loads (`features/player.md`).
+- **Tables:** `player_items`, `player_settings` (player migrations 1–2, `DATABASE.md`).
 - **Dependency:** libmpv (`third_party/CMakeLists.txt`: pkg-config `mpv`, or `MPV_ROOT` on Windows).
 
 ## 4. Roadmap

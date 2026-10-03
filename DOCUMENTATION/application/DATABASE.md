@@ -16,6 +16,7 @@ Status: `v0.2.0` (Media library v1): file migrations 1–3, audio migrations 1�
   - `foreign_keys=ON`
   - a `busy_timeout` of 5 s
 - **Ownership:** every table belongs to one engine and carries its prefix (`file_`, later `audio_`, `video_`, …). Only that engine's code writes it.
+- **Another program's database, read only** (since 2026-10-03): `video::PlexPosters` opens Plex Media Server's `com.plexapp.plugins.library.db` with `db::Database::open_read_only`. It reads `media_parts`, `media_items`, and `metadata_items` once into a TEMP table on its own connection, and never writes Plex's file. It isn't part of `library.db`, and nothing here references it (`features/posters.md` §3).
 - **Cross-engine links and joins:**
   - Another engine's rows may reference it by id, with a foreign key: `audio_tracks.entry_id → file_entries.id ON DELETE CASCADE`.
   - Read-only joins on documented columns are allowed. That's why there's one database (ARCHITECTURE §3).

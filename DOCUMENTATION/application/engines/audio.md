@@ -28,9 +28,9 @@ Not in scope:
 
 - **Public API:** `include/hoardor/audio/audio.hpp`:
   - `TrackInfo`, `read`, `embedded_cover`
-  - `Field`, `Condition`, `Filter`, `Order`, `Track`, `Group`, `GroupOrder`, `PendingEntry`
+  - `Field`, `Condition` (a value, or `none`: "has nothing in this field", since 2026-10-03), `Filter`, `Order`, `Track`, `Group`, `GroupOrder`, `PendingEntry`
   - `Library`: `open`, `pending`, `pending_count`, `store`, `store_error`, `remove_unused_names`, `tracks`, `groups`, `count`, `group_count`, `track`
-- **Tables:** `audio_tracks`, `audio_names`, `audio_track_names` (audio migration 1, `DATABASE.md`).
+- **Tables:** `audio_tracks`, `audio_names`, `audio_track_names`, `audio_search` (audio migrations 1–3, `DATABASE.md`).
 - **Shared internals:** `src/media/` (the ffmpeg layer and the query builder, shared with `video`) and `src/core/text` (sort keys).
 - **Performance** (50k tracks, Release, this VM; `features/media_listing.md` §7):
   - an album page by name anywhere in the list in about 3.5 ms
