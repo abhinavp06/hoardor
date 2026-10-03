@@ -2,6 +2,10 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Frame tests encode with mpeg4 (2026-10-03, branch `abhinavp06/PLAYER`)
+
+`tests/video/frame_test.cpp` makes its clips with `mpeg4`, ffmpeg's built-in encoder, instead of `libx264`, which LGPL builds (as on Windows) don't have. TYLI's CI hit this in its own poster test. The older video tests still use `libx264`; they only run on Linux for now. Switch them when hoardor's tests run on Windows (the HDR ones need a 10-bit encoder).
+
 ### Posters for every movie and show: Plex's, else a frame (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** Most movies and shows still had no poster after the companion fix: the user's library is a Plex library, and Plex keeps its art in its own data folder, not next to the videos. The user chose: "Plex's posters, and a frame as the fallback". Plex runs on the same PC. Design: `features/posters.md`.

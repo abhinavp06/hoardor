@@ -19,7 +19,7 @@ protected:
         const fs::path f = dir.path() / name;
         fs::create_directories(f.parent_path());
         run_ffmpeg("-f lavfi -t " + std::to_string(seconds) + " -i " + quoted(source) + (filters.empty() ? "" : " -vf " + quoted(filters)) +
-                   " -c:v libx264 -preset ultrafast -g 5 -pix_fmt yuv420p " + quoted(f.string()));
+                   " -c:v mpeg4 -q:v 5 -g 5 -pix_fmt yuv420p " + quoted(f.string()));
         return f;
     }
 
