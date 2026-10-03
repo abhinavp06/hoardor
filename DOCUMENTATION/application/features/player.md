@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Draft, awaiting the user's approval** (2026-10-03) |
+| Status | **Approved by the user** (2026-10-03: "looks good", plus the like heart, §1); building phase 1 |
 | Branch | `abhinavp06/PLAYER` (one PR; pairs with TYLI's branch of the same name) |
 | Ships in | `v0.3.0` |
 | Engines involved | **`player`** (new: playback through libmpv, the queue, progress and viewed state), `file` (`resolve(entry)`, already there), `master` (nothing in the first draft; yielding a sync to playback is OI-1, later), `db` (nothing new) |
@@ -19,6 +19,7 @@
   - music: the queue with the queue prompt, and a now-playing bar
   - video: a player page (in the window or full screen, seek, audio and subtitle tracks)
   - resume and viewed markers for movies and episodes, and play counts for music
+  - **liking** (the user, reviewing the mockups): a heart in the now-playing bar and on track rows, green and filled when liked. Likes are stored now; the "liked songs" list comes with playlists
 - **Later (TODO):** bit-perfect audio (Windows exclusive mode), ReplayGain, chapters and Skip Intro, a saved queue across restarts, yielding a sync to playback (OI-1), and playlists and liked songs (their own feature).
 - **Unchanged rule (2026-10-02):** the queue holds **entry ids**, never "an album". Copies found later never change what's playing or queued.
 
@@ -39,7 +40,7 @@
 | Phase | Scope | Exit criteria |
 |---|---|---|
 | 1. Engine | libmpv in the build (Linux; Windows in the workflow); `player::Player`: load, transport, volume, track lists, events; the queue of entry ids with an injected resolver; gapless next | Headless tests with real files (`ao=null`, `vo=null`): transport, queue order, prompt actions, a missing file, an offline root, gapless handover |
-| 2. Progress | `player_progress` and `player_settings` tables (player migration 1), the save cadence, viewed and play-count rules, resume | Tests: thresholds, resume, flat writes |
+| 2. Per-entry state | `player_items` and `player_settings` tables (player migration 1), the save cadence, viewed and play-count rules, resume, likes | Tests: thresholds, resume, likes, flat writes |
 | 3. Video rendering | `player::VideoRenderer` (mpv's OpenGL render API behind plain function pointers); TYLI draws it in a Qt Quick item | A frame on the VNC display, and in the Windows build |
 | 4. TYLI | TYLI's doc: the bridge, the now-playing bar, the queue prompt, the video page, markers | — |
 | 5. Windows and OI-1 | libmpv in the Windows zip; the user's test; measure playback during a sync on the same HDD | The user's check; OI-1 numbers in the changelog |
@@ -53,7 +54,7 @@
 - **Transport:** play, pause, toggle, stop, seek (absolute or relative), next, previous (previous restarts the track after 3 s, a setting), volume, and mute.
 - **Tracks:** the audio and subtitle tracks of the playing file (embedded, plus external `.srt`/`.ass` next to it, which mpv loads with `sub-auto=fuzzy`), and choosing one.
 - **State to the caller:** what's playing, paused or loading, position and duration, the track lists, errors, and the queue's changes. Callbacks run on the player's thread; TYLI forwards them to its UI thread, as it does for `SyncWorker`.
-- **Progress:** saving the position, viewed, and play counts in its own tables.
+- **Per-entry state:** saving the position, viewed, play counts, and likes in its own tables.
 - **Video frames:** handing them to whoever draws them (§4.5).
 
 **Not in scope:**
@@ -121,6 +122,11 @@ public:
     void set_volume(int volume); void set_muted(bool muted);
     void select_audio(int track_id); void select_subtitle(std::optional<int> track_id);  // nullopt: off
 
+    // Per-entry state (§5): any entry, playing or not. Reads are SQLite only.
+    void set_liked(EntryId entry, bool liked);
+    Result<ItemState> state(EntryId entry);
+    Result<std::vector<ItemState>> states(std::span<const EntryId> entries);   // a page of a grid
+
     Status status() const;
     VideoRenderer* video();   // §4.5
 };
@@ -160,7 +166,7 @@ public:
 - **Why these numbers:** 20 s of a 1080p remux (about 4 MB/s) is about 80 MB, roughly the size of the cache. A typical encode fits many times over. Memory stays bounded: the cache is a cap, not a fixed allocation.
 - **The question it answers:** "a few seconds buffered" (OI-1's first lever) is enough to ride out a cold sync on the same HDD. The second lever (`master` pausing a sync of the playing drive) waits for the measurement in phase 5.
 
-## 5. Progress, viewed, and play counts
+## 5. Progress, viewed, play counts, and likes
 
 | Rule | Default (setting) |
 |---|---|
@@ -172,25 +178,29 @@ public:
 
 - **Writes stay small:** one upsert per save, at most one every 10 s.
 - **Keyed by entry id:** a moved or renamed file keeps its progress, as long as the file engine keeps the entry. Move detection is file engine phase 3.
-- **Generic reads for TYLI:** `progress(entry)`, and `progress_of(entries)` for a page of items. Browsing never touches a drive.
+- **Likes:** `set_liked(entry, true/false)` stores `liked_ns` (0 = not liked). The "liked songs" list (a query over liked entries, newest first) comes with the playlists feature, which can read the same column.
+- **Generic reads for TYLI:** `state(entry)` and `states(entries)` (an `ItemState`: position, duration, viewed, play count, last played, liked) for a page of items. Browsing never touches a drive.
 
 ## 6. Schema (proposed; mirrored in `DATABASE.md` §5)
 
 ```sql
 -- player, migration 1
-CREATE TABLE player_progress (
+CREATE TABLE player_items (                      -- the user's state per file: one row once played or liked
     entry_id INTEGER PRIMARY KEY REFERENCES file_entries(id) ON DELETE CASCADE,
     position_ms INTEGER NOT NULL DEFAULT 0,
     duration_ms INTEGER NOT NULL DEFAULT 0,
     viewed INTEGER NOT NULL DEFAULT 0,           -- 1 once past viewed_percent or the end
     play_count INTEGER NOT NULL DEFAULT 0,
-    last_played_ns INTEGER NOT NULL DEFAULT 0    -- Unix ns
+    last_played_ns INTEGER NOT NULL DEFAULT 0,   -- Unix ns
+    liked_ns INTEGER NOT NULL DEFAULT 0          -- when it was liked; 0 = not liked
 );
-CREATE INDEX player_progress_recent ON player_progress (last_played_ns);
+CREATE INDEX player_items_recent ON player_items (last_played_ns);
+CREATE INDEX player_items_liked ON player_items (liked_ns) WHERE liked_ns > 0;
 CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ```
 
-- `player_progress_recent` serves "continue watching" and "recently played" (the home page, later).
+- `player_items_recent` serves "continue watching" and "recently played" (the home page, later). `player_items_liked` (partial: liked rows only) serves "liked songs".
+- **One table, not one per kind of state:** it's all the user's state about one file, and a grid reads it in one query per page.
 - The volume and mute state live in `player_settings`, so they survive a restart.
 
 ## 7. `player::Settings` (one struct, defaults in code, persisted in `player_settings`)
@@ -227,6 +237,8 @@ CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 | Viewed and resume thresholds | as §5 | short generated videos, with the thresholds set low |
 | Progress writes | at most one per save interval while playing | count writes |
 | Volume and mute | remembered across a reopen | |
+| Like, unlike, like again | `liked_ns` set, cleared, set to the new time; no row is created just to read | |
+| A liked file is deleted | its row goes with the entry (`ON DELETE CASCADE`) | |
 | `LC_NUMERIC` | libmpv needs the C locale for numbers: set at `open` (the caller is told in the header) | |
 | Shutdown while playing | progress saved; the thread joins; mpv destroyed after the renderer | |
 

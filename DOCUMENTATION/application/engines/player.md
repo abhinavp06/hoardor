@@ -7,7 +7,7 @@ Status: **Designed, awaiting the user's approval** (2026-10-03), in `features/pl
 - **Playing audio and video through libmpv** (mpv's player library, decided by the user on 2026-10-03): one playback session, with transport, volume, and audio and subtitle tracks.
 - **The queue:** entry ids in order, never "an album". Files are resolved one at a time through a resolver the caller injects, so the engine never calls the file engine.
 - **Gapless music:** mpv holds only the current file and the next one.
-- **Progress:** positions, viewed state, and play counts in `player_progress`; its tunables in `player_settings`.
+- **Per-entry state:** positions, viewed state, play counts, and likes in `player_items`; its tunables in `player_settings`.
 - **Video frames:** mpv's OpenGL render API behind plain function pointers (`VideoRenderer`), drawn by the app (TYLI) on its render thread.
 
 **Not in scope:** what an album or a season is (the caller passes entry ids), drawing controls, and opening files by itself.

@@ -260,14 +260,16 @@ A feature doc that changes the schema lists its tables here until they're built.
 **Player, first draft** (`features/player.md` §6, awaiting approval): player migration 1.
 
 ```sql
-CREATE TABLE player_progress (
+CREATE TABLE player_items (
     entry_id INTEGER PRIMARY KEY REFERENCES file_entries(id) ON DELETE CASCADE,
     position_ms INTEGER NOT NULL DEFAULT 0,
     duration_ms INTEGER NOT NULL DEFAULT 0,
     viewed INTEGER NOT NULL DEFAULT 0,
     play_count INTEGER NOT NULL DEFAULT 0,
-    last_played_ns INTEGER NOT NULL DEFAULT 0
+    last_played_ns INTEGER NOT NULL DEFAULT 0,
+    liked_ns INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX player_progress_recent ON player_progress (last_played_ns);
+CREATE INDEX player_items_recent ON player_items (last_played_ns);
+CREATE INDEX player_items_liked ON player_items (liked_ns) WHERE liked_ns > 0;
 CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ```
