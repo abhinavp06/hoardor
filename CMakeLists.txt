@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.23)
 
 project(
     hoardor
-    VERSION 0.2.0
+    VERSION 0.3.0
     LANGUAGES C CXX
 )
 
@@ -63,9 +63,16 @@ add_library(hoardor
     src/video/sources.cpp
     src/video/read.cpp
     src/video/library.cpp
+    src/video/frame.cpp
+    src/video/plex.cpp
+
+    # PLAYER ENGINE (libmpv)
+    src/player/library.cpp
+    src/player/player.cpp
 
     # MASTER ENGINE
     src/master/sync_worker.cpp
+    src/master/playback.cpp
 )
 
 # Platform backends (ARCHITECTURE §5): one implementation per OS, chosen here, never by #ifdef in shared code.
@@ -94,7 +101,7 @@ target_include_directories(hoardor
 )
 
 find_package(Threads REQUIRED)
-target_link_libraries(hoardor PRIVATE hoardor_sqlite3 hoardor_pugixml hoardor_ffmpeg PUBLIC Threads::Threads)
+target_link_libraries(hoardor PRIVATE hoardor_sqlite3 hoardor_pugixml hoardor_ffmpeg hoardor_mpv PUBLIC Threads::Threads)
 
 if(MSVC)
     target_compile_options(hoardor PRIVATE /W4 /permissive- /utf-8)

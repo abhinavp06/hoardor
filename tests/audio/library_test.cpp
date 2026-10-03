@@ -320,7 +320,7 @@ TEST_F(AudioLibraryTest, CopiesInTwoQualitiesAreOneGroup) {
     }
     const auto groups = all_groups({Field::AlbumArtist, Field::Album}, {}, GroupOrder::Values, false);
     ASSERT_EQ(groups.size(), 1u);
-    EXPECT_EQ(groups[0].tracks, 6u);  // grouping copies is TYLI's job
+    EXPECT_EQ(groups[0].tracks, 6u);  // grouping copies is the app's job
     // The cover comes from a track that has embedded art.
     EXPECT_EQ(groups[0].cover_entry, ids.at("hires/1.flac").id);
     EXPECT_EQ(tracks->count({{{Field::BitDepth, Value{24}}, {Field::SampleRate, Value{96000}}}}).value(), 3u);
@@ -403,3 +403,19 @@ TEST_F(AudioLibraryTest, SearchFindsWordPrefixesAcrossFieldsIgnoringAccents) {
     EXPECT_EQ(found("radio"), 0u);
     EXPECT_EQ(found("bjork"), 0u);
 }
+
+TEST_F(AudioLibraryTest, MigrationThreeRetriesRejectedTracksOnce) {
+    put("a.flac");
+    put("b.flac");
+    sync_music();
+    ASSERT_TRUE(tracks->store_error(ids.at("a.flac").id, 1, old_mtime, "not a playable audio file"));
+    ASSERT_TRUE(tracks->store_error(ids.at("b.flac").id, 1, old_mtime, "Invalid data found when processing input"));
+    ASSERT_EQ(tracks->pending_count(std::nullopt).value(), 0u);
+    // A database from before migration 3.
+    ASSERT_TRUE(db->exec("UPDATE db_migrations SET version = 2 WHERE component = 'audio'"));
+    ASSERT_TRUE(audio::Library::open(*db).has_value());
+    const auto pending = tracks->pending(std::nullopt, 0, 10).value();
+    ASSERT_EQ(pending.size(), 1u);   // only the one rejected for having no length
+    EXPECT_EQ(pending[0].entry_id, ids.at("a.flac").id);
+}
+

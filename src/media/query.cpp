@@ -94,6 +94,21 @@ std::expected<FilterSql, std::string> filter_sql(const Schema& schema, std::span
     for (const Condition& c : filter) {
         auto field = field_of(schema, c.field);
         if (!field) return std::unexpected(field.error());
+        if (c.none) {
+            if (!(*field)->search_table.empty()) return std::unexpected("a full-text field can't be empty");
+            if ((*field)->names_kind > 0) {
+                const std::string l = "fn" + std::to_string(n), nm = "fm" + std::to_string(n);
+                ++n;
+                out.where += " AND NOT EXISTS (SELECT 1 FROM " + schema.link_table + " " + l + " JOIN " + schema.names_table + " " +
+                             nm + " ON " + nm + ".id = " + l + ".name_id AND " + nm + ".kind = " +
+                             std::to_string((*field)->names_kind) + " WHERE " + l + ".entry_id = " + schema.id +
+                             ((*field)->link_extra.empty() ? "" : " AND " + replace_alias((*field)->link_extra, l)) + ")";
+            } else {
+                if ((*field)->key.empty()) return std::unexpected("this field can't be filtered");
+                out.where += (*field)->text ? " AND COALESCE(" + (*field)->key + ", '') = ''" : " AND COALESCE(" + (*field)->key + ", 0) = 0";
+            }
+            continue;
+        }
         if (!(*field)->search_table.empty()) {
             const std::string text = std::holds_alternative<std::string>(c.value) ? std::get<std::string>(c.value)
                                                                                     : std::to_string(std::get<std::int64_t>(c.value));

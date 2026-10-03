@@ -73,7 +73,14 @@ CREATE TRIGGER audio_search_delete AFTER DELETE ON audio_tracks BEGIN
 END;
 )sql";
 
-constexpr std::array<db::Migration, 2> migrations{{{1, schema_v1}, {2, schema_v2}}};
+// Read once more what was rejected as "not a playable audio file": a FLAC with an unknown
+// length (STREAMINFO says 0 samples) was rejected until 2026-10-03, and an unreadable row is
+// otherwise only retried when its file changes. A size that can't match makes it pending.
+constexpr std::string_view schema_v3 = R"sql(
+UPDATE audio_tracks SET source_size = -1 WHERE read_error = 'not a playable audio file';
+)sql";
+
+constexpr std::array<db::Migration, 3> migrations{{{1, schema_v1}, {2, schema_v2}, {3, schema_v3}}};
 
 constexpr int artist_kind = 1;
 constexpr int genre_kind = 2;
@@ -190,7 +197,7 @@ std::string_view order_sql(GroupOrder order) {
 
 std::vector<media::Condition> conditions(const Filter& filter) {
     std::vector<media::Condition> out;
-    for (const auto& c : filter.all) out.push_back(media::Condition{int(c.field), c.value});
+    for (const auto& c : filter.all) out.push_back(media::Condition{int(c.field), c.value, c.none});
     return out;
 }
 

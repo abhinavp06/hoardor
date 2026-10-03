@@ -12,3 +12,12 @@ race:walIndexReadHdr
 race:walTryBeginRead
 race:walIndexAppend
 race:walCheckpoint
+
+# libmpv's decoding: ffmpeg's frame-threaded decoders (libavcodec, libavutil) inside libmpv
+# synchronize with atomics in code built without ThreadSanitizer, so the tool reports their
+# buffer handover between decoder threads as races (2026-10-03: 13 reports in the player
+# tests, all with frames only in libmpv/libavcodec/libavutil, none in hoardor). Matched by
+# module, so races with a hoardor frame still show.
+race:libavcodec.so
+race:libavutil.so
+race:libmpv.so

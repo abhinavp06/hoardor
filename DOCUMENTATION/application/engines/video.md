@@ -22,6 +22,7 @@ Not in scope:
   - movies: `<name>-poster`, `poster`, `folder`, `cover`, `movie` in the movie's folder
   - episodes: the show's `poster`/`folder`/`cover` first (the shows grid), then the season's
   - the poster is stored as the image's entry id, and a removed image isn't handed out (a `LEFT JOIN`)
+  - **no art of its own** (2026-10-03, `features/posters.md`): Plex's poster (`PlexPosters`, Plex's database and files, read-only), else a frame (`grab_frame`). These aren't stored: the app asks when it makes thumbnails, for `Group::first_entry`
 - **Copies** (1080p and 4K of one movie) are separate items with the same title and year. TYLI groups them and picks the best by default.
 - **Directors, writers, and genres** are `video_names` rows linked with a role, so a writer never shows up in a director's catalog.
 
@@ -29,8 +30,9 @@ Not in scope:
 
 - **Public API:** `include/hoardor/video/video.hpp`:
   - `Type`, `Source`, `Stream`, `VideoInfo`, `read(path, companions)`, `companion_prefixes(path)`, `embedded_poster`
-  - `Field`, `Condition`, `Filter`, `Order`, `Item`, `Group`, `GroupOrder`, `PendingEntry`
+  - `Frame`, `grab_frame(path, at, max_height)`, `PlexPosters` (`find_folder`, `open`, `poster`)
+  - `Field`, `Condition` (a value, or `none`: "has nothing in this field", e.g. no director; since 2026-10-03), `Filter`, `Order`, `Item`, `Group` (with `first_entry`: the first real episode, or any copy of a movie), `GroupOrder`, `PendingEntry`
   - `Library`: `open`, `pending`, `pending_count`, `store(…, poster_entry)`, `store_error`, `remove_unused_names`, `items`, `groups`, `count`, `group_count`, `item`
 - **Internal:** `src/video/sources.hpp` (`.nfo` parsing with pugixml; name parsing), tested directly.
-- **Tables:** `video_items`, `video_names`, `video_item_names` (video migration 1). Migration 3 (2026-10-03) marks every item for one more read (the companion fix).
+- **Tables:** `video_items`, `video_names`, `video_item_names`, `video_search` (video migrations 1–3, `DATABASE.md`). Migration 3 (2026-10-03) marks every item for one more read (the companion fix).
 - **Search** (since 2026-10-02): `Field::Search`, full-text over the `video_search` FTS5 table (migration 2).

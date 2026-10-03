@@ -102,7 +102,7 @@ TEST_F(VideoLibraryTest, OneCardPerMovieWhateverTheCopies) {
     EXPECT_FALSE(page.items[1].any_hdr);
     EXPECT_EQ(videos->group_count(card, movies).value(), 2u);
 
-    // The movie page: its copies, best first (TYLI picks the default).
+    // The movie page: its copies, best first (the app picks the default).
     const Filter arrival{{{Field::Title, Value{"arrival"}}, {Field::Year, Value{std::int64_t{2016}}}}};
     const std::vector<video::Order> best{{Field::Height, true}};
     const auto copies = videos->items(arrival, best).value().items;
@@ -142,6 +142,62 @@ TEST_F(VideoLibraryTest, ShowsSeasonsAndEpisodes) {
     ASSERT_EQ(eps.size(), 3u);
     EXPECT_EQ(eps[0].episode, 1);
     EXPECT_EQ(eps[2].episode, 3);
+}
+
+TEST_F(VideoLibraryTest, AGroupsFirstEntryIsItsFirstRealEpisode) {
+    // For a frame as the poster when nothing else has one (features/posters.md §4).
+    for (const char* f : {"Dark/Specials.mkv", "Dark/S2E1.mkv", "Dark/S1E2.mkv", "Dark/S1E1.mkv", "Heat 720p.mkv", "Heat 1080p.mkv"}) put(f);
+    sync("Shows");
+    store("Dark/Specials.mkv", episode("Dark", 0, 1, "Making of"));
+    store("Dark/S2E1.mkv", episode("Dark", 2, 1, "B"));
+    store("Dark/S1E2.mkv", episode("Dark", 1, 2, "A2"));
+    store("Dark/S1E1.mkv", episode("Dark", 1, 1, "A1"));
+    store("Heat 720p.mkv", movie("Heat", 1995, 720));
+    store("Heat 1080p.mkv", movie("Heat", 1995, 1080));
+
+    const Filter episodes{{{Field::Type, Value{std::int64_t{2}}}}};
+    const auto shows = videos->groups(std::vector<Field>{Field::Show}, episodes).value().items;
+    ASSERT_EQ(shows.size(), 1u);
+    EXPECT_EQ(shows[0].first_entry, ids.at("Dark/S1E1.mkv"));
+    EXPECT_EQ(shows[0].poster_entry, 0);  // nothing else: the app falls back to Plex, then a frame
+
+    const Filter movies{{{Field::Type, Value{std::int64_t{1}}}}};
+    const auto heat = videos->groups(std::vector<Field>{Field::Title, Field::Year}, movies).value().items;
+    ASSERT_EQ(heat.size(), 1u);
+    EXPECT_TRUE(heat[0].first_entry == ids.at("Heat 720p.mkv") || heat[0].first_entry == ids.at("Heat 1080p.mkv"));
+}
+
+TEST_F(VideoLibraryTest, NoDirectorOrNoGenreIsAFilterToo) {
+    // For a grid "by director": its sections leave out the movies without one, so the grid
+    // adds a "no director" section from this filter.
+    for (const char* f : {"Heat.mkv", "Home video.mkv", "Arrival.mkv"}) put(f);
+    sync();
+    video::VideoInfo heat = movie("Heat", 1995);
+    heat.directors = {"Michael Mann"};
+    heat.genres = {"Crime"};
+    store("Heat.mkv", heat);
+    store("Home video.mkv", movie("Home video", 0));
+    video::VideoInfo arrival = movie("Arrival", 2016);
+    arrival.genres = {"Drama"};
+    store("Arrival.mkv", arrival);
+
+    const std::vector<Field> card{Field::Title, Field::Year};
+    const std::vector<Field> by_director{Field::Director};
+    EXPECT_EQ(videos->group_count(by_director, {}).value(), 1u);   // only Michael Mann
+    const Filter no_director{{{Field::Director, Value{}, true}}};
+    const auto none = videos->groups(card, no_director).value().items;
+    ASSERT_EQ(none.size(), 2u);
+    EXPECT_EQ(none[0].values[0], "Arrival");
+    EXPECT_EQ(none[1].values[0], "Home video");
+    const Filter no_genre{{{Field::Genre, Value{}, true}}};
+    EXPECT_EQ(videos->count(no_genre).value(), 1u);
+    const Filter no_year{{{Field::Year, Value{}, true}}};
+    EXPECT_EQ(videos->count(no_year).value(), 1u);
+    // With other conditions, and on its own count.
+    const Filter both{{{Field::Director, Value{}, true}, {Field::Genre, Value{}, true}}};
+    EXPECT_EQ(videos->count(both).value(), 1u);
+    const Filter search_none{{{Field::Search, Value{}, true}}};
+    EXPECT_FALSE(videos->count(search_none).has_value());
 }
 
 TEST_F(VideoLibraryTest, DirectorsGenresAndWriters) {

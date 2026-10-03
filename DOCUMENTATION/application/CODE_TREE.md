@@ -39,7 +39,7 @@ hoardor/
 │   │       ├── fn embedded_cover(path) -> Result<bytes>      the attached picture, or empty
 │   │       ├── enum Field                      Title, Artist, AlbumArtist, Album, Genre, Year, Disc, Track, Duration, Bitrate, SampleRate,
 │   │       │                                   BitDepth, Codec, Lossless, Added, Category, Root, Entry, Search (full-text filter)
-│   │       ├── using Value · struct Condition { field, value } · struct Filter { all[] } · struct Order { field, descending }
+│   │       ├── using Value · struct Condition { field, value, none } · struct Filter { all[] } · struct Order { field, descending }
 │   │       ├── struct Track                    a stored track + root_id, root_online, added_ns, size
 │   │       ├── struct Group                    { values[], tracks, duration_ms, added_first/last_ns, year_min/max, cover_entry, any_online }
 │   │       ├── enum GroupOrder                 Values, AddedLast, Year, Tracks
@@ -58,12 +58,16 @@ hoardor/
 │   │       ├── fn read(path, companions) -> Result<VideoInfo>   streams + (.nfo > tags > names) + poster pick
 │   │       ├── fn companion_prefixes(path) -> vector<string>      "<name>.", "<name>-poster.", "poster.", … for file::Library::companions
 │   │       ├── fn embedded_poster(path) -> Result<bytes>         attached picture or a Matroska image attachment ("cover.*", else *cover*/*poster*)
+│   │       ├── struct Frame { width, height, rgb }  · default_frame_positions {0.15, 0.30, 0.50}   (features/posters.md)
+│   │       ├── fn grab_frame(path, at, max_height=480) -> Result<Frame>   a still for a poster; skips nearly black frames; widens anamorphic video
+│   │       ├── class PlexPosters               Plex's own posters, read-only: static find_folder() · static open(plex_folder) (one read into a
+│   │       │                                   TEMP table keyed by the last folder + file name) · poster(video_file) -> optional<path>
 │   │       ├── enum Field                      Type, Title, Year, Genre, Director, Show, Season, Episode, Duration, Height, Hdr, VideoCodec,
 │   │       │                                   Added, Category, Root, Entry, Search (full-text filter)
-│   │       ├── Value, Condition, Filter, Order, PendingEntry   (as in audio)
+│   │       ├── Value, Condition (none: "has nothing in this field"), Filter, Order, PendingEntry   (as in audio)
 │   │       ├── struct Item                     a stored movie/episode + poster_entry, has_embedded_poster, root_id, root_online, added_ns, size
 │   │       ├── struct Group                    { values[], items, duration_ms, added_first/last_ns, year_min/max, max_height, any_hdr,
-│   │       │                                     poster_entry, embedded_poster_entry, any_online }
+│   │       │                                     poster_entry, embedded_poster_entry, any_online, first_entry (first real episode / any copy) }
 │   │       ├── enum GroupOrder                 Values, AddedLast, Year, Items
 │   │       └── class Library                   open · pending · pending_count · store(…, poster_entry) · store_error · remove_unused_names
 │   │                                           · items · groups · count · group_count · item
@@ -85,6 +89,7 @@ hoardor/
 │   │       ├── class Database                  one connection; move-only; one thread at a time
 │   │       │   ├── static open(file, Options) -> Result<Database>          WAL, synchronous=NORMAL, foreign keys, busy_timeout
 │   │       │   ├── static open_in_memory(Options) -> Result<Database>      for tests (no WAL)
+│   │       │   ├── static open_read_only(file, Options) -> Result<Database>  another program's database (Plex's): never written, no WAL switch
 │   │       │   ├── .exec(sql) -> Result<void>  one or more statements, no rows
 │   │       │   ├── .prepare(sql) -> Result<Statement>
 │   │       │   ├── .last_insert_id() / .changes()
@@ -169,7 +174,22 @@ hoardor/
 │   │           ├── .resolve_root(Root&)         (private) marker at last path -> search mounts -> relocate | offline
 │   │           └── .sync_one(id, stop, progress, index, count)   (private) the per-root sync algorithm (feature doc §4.6)
 │   │
+│   ├── player/
+│   │   └── player.hpp                          ns hoardor::player: playback on libmpv, the queue, per-entry state (engines/player.md)
+│   │       ├── struct Settings                 read ahead, hwdec, languages, subtitles, resume / viewed / play-count rules, volume; ::defaults()
+│   │       ├── struct ItemState                { entry, position_ms, duration_ms, viewed, play_count, last_played_ns, liked_ns } .liked()
+│   │       ├── class Library                   player_items + player_settings on one connection
+│   │       │   └── open · state · states(entries) · set_liked · save_position · count_play · load_settings · save_settings
+│   │       ├── enum State / struct Track / struct Status   Idle|Loading|Playing|Paused · audio/subtitle tracks (+ forced) · what's loaded, position, volume, tracks
+│   │       ├── using Resolver / struct Callbacks / struct Outputs   entry -> path (player thread) · status, position, queue, error · audio/video "auto"/"null", log_file
+│   │       ├── class VideoRenderer             mpv's OpenGL render API: create(get_proc_address) · render(fbo, w, h, flip) · destroy · set_update_callback
+│   │       └── class Player                    one session on its own thread; every command posted to it
+│   │           ├── static start(db_file, Resolver, Callbacks, Outputs) -> Result<unique_ptr<Player>>   sets LC_NUMERIC "C"
+│   │           ├── play_now · add · jump · remove · clear · queue · current
+│   │           └── toggle · pause · resume · stop · next · previous · seek · seek_by · set_volume · set_muted · select_audio · select_subtitle · status · video
+│   │
 │   └── master/
+│       ├── playback.hpp                        fn file_resolver(db_file) -> player::Resolver   file::Library::resolve on its own connection; errors in words
 │       └── sync_worker.hpp                     ns hoardor::master: background execution (engines/master.md)
 │           ├── struct MetadataProgress         { done, total, elapsed_ms }
 │           ├── struct MetadataReport           { read, failed, skipped, cancelled, elapsed_ms }
@@ -212,6 +232,8 @@ hoardor/
 │   │   │                                       <movie>, <episodedetails>, <tvshow>; Kodi URL tail cut) · from_name(file) (SxxEyy, NxNN,
 │   │   │                                       "Season N/NN - Title", "Title (Year)", "Title.Year.…") · season_of_folder(name) · clean_name(text)
 │   │   ├── read.cpp                            video::read, video::embedded_poster; (internal) hdr_of, cover_attachment, pick_poster
+│   │   ├── frame.cpp                           video::grab_frame (libavcodec + libswscale); (internal) decode_at, brightness, to_rgb
+│   │   ├── plex.cpp                            video::PlexPosters; (internal) key_of, normalized, State::bundle/image (metadata://, upload://, media://)
 │   │   └── library.cpp                         video::Library; (internal) schema_v1, schema(), item_columns/read_item, streams_text/streams_from
 │   │
 │   ├── db/
@@ -271,10 +293,16 @@ hoardor/
 │   │       ├── mount_points_windows.cpp        list_mount_points from GetLogicalDriveStringsW
 │   │       └── mount_points_other.cpp          returns {} (macOS until file engine phase 4)
 │   │
+│   ├── player/
+│   │   ├── library.cpp                         player::Library; (internal) schema_v1, item_columns/read_item, int/bool/text setting tables
+│   │   └── player.cpp                          VideoRenderer; Player::Impl (mpv handle, task queue, run loop: events, polls time-pos,
+│   │                                           start_item / prepare_next (mpv holds current + next) / begin_item / save_current / go_idle)
+│   │
 │   └── master/
+│       ├── playback.cpp                        file_resolver
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 192 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 233 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -288,9 +316,9 @@ hoardor/
 │   │   └── text_test.cpp                       6 TESTs: SortKey.{NumbersSortNaturally, LeadingZerosDontMatter, AVeryLongNumberStillSorts,
 │   │                                           CaseAndArticlesAreIgnored, NumbersBeforeLetters_UnicodeKept}, SplitValues.SeparatorsTrimmingAndDuplicates
 │   ├── audio/
-│   │   ├── read_test.cpp                       7 TESTs (AudioRead): FlacTagsAndHiResStream, Mp3AtConstantBitRate, M4aOggOpusAndWav (+ ALAC),
-│   │   │                                       MissingTagsFallBackToNames, UnicodeNamesAndTags, EmbeddedCover, UnreadableAndMissingFiles
-│   │   └── library_test.cpp                    14 TESTs (AudioLibraryTest): SearchFindsWordPrefixesAcrossFieldsIgnoringAccents, PendingListsSettledUnreadAudioOnly, ChangedFilesBecomePendingAgain,
+│   │   ├── read_test.cpp                       8 TESTs (AudioRead): FlacTagsAndHiResStream, Mp3AtConstantBitRate, M4aOggOpusAndWav (+ ALAC),
+│   │   │                                       MissingTagsFallBackToNames, UnicodeNamesAndTags, EmbeddedCover, UnknownLengthIsStillATrack, UnreadableAndMissingFiles
+│   │   └── library_test.cpp                    15 TESTs (AudioLibraryTest): MigrationThreeRetriesRejectedTracksOnce, SearchFindsWordPrefixesAcrossFieldsIgnoringAccents, PendingListsSettledUnreadAudioOnly, ChangedFilesBecomePendingAgain,
 │   │                                           OfflineRootsHaveNoPendingWorkButStillList, UnreadableFilesAreRecordedNotListedNotRetried,
 │   │                                           StoredFieldsComeBack, FilterIgnoresCaseAndArticles_OrderByDiscAndTrack,
 │   │                                           PagingVisitsEveryTrackOnceInEveryOrder, AlbumsAreGroupsInEveryOrder, ManyArtistsAndGenresPerTrack,
@@ -302,9 +330,16 @@ hoardor/
 │   │   ├── read_test.cpp                       10 TESTs (VideoRead): StreamsLanguagesAndTags, HdrIsRecognized, NfoBeatsTagsAndNames_PosterIsPicked,
 │   │   │                                       EpisodeFromNamesWithTheShowsNfoAndPoster, MovieFromNameOnly, EmbeddedPosterAttachment, PosterNamedLikeTheMovie,
 │   │   │                                       EmbeddedPosterUnderOtherNamesButNeverAFont, NotAVideo; VideoCompanionPrefixes.TheFilesOwnNameThenTheCommonNames
-│   │   └── library_test.cpp                    9 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
+│   │   ├── library_test.cpp                    11 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
 │   │                                           DirectorsGenresAndWriters, PostersComeFromCompanionImagesThatStillExist, PendingAndErrorsAndStreams,
-│   │                                           MigrationThreeReadsEveryVideoAgain, PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved
+│   │                                           MigrationThreeReadsEveryVideoAgain, PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved,
+│   │                                           AGroupsFirstEntryIsItsFirstRealEpisode, NoDirectorOrNoGenreIsAFilterToo
+│   │   ├── frame_test.cpp                      6 TESTs (VideoFrame): AScaledStillKeepsTheShape, NeverScaledUp, ADarkIntroIsSkipped,
+│   │   │                                       AllDarkStillGivesTheLastFrame, AnamorphicVideoIsWidened, AudioOnlyOrMissingFilesFail
+│   │   └── plex_test.cpp                       8 TESTs (PlexPostersTest, a fake Plex folder): AMoviesChosenPosterEvenUnderAnotherDriveLetter,
+│   │                                           AnEpisodeGetsItsShowsPosterElseItsSeasons, AMissingImageFallsBackToAnotherPosterOfTheSameItem,
+│   │                                           TheSameFolderAndNameTwiceNeedsTheExactPath, GenericEpisodeNamesAreToldApartByTheirShow,
+│   │                                           PlexsDatabaseIsNeverWritten, NoPlexOrAnUnexpectedDatabaseFailsToOpen, FindsPlexsFolderInLocalAppData
 │   ├── db/
 │   │   └── database_test.cpp                   12 TESTs
 │   │       ├── Database.*                      OpensInMemoryWithForeignKeysOn, OpensFileInWalMode, OpenFailsForImpossiblePath, ReportsSqlErrors
@@ -365,6 +400,16 @@ hoardor/
 │   │       │                                   SmallBatchesGiveTheSameResult, PagingVisitsEveryEntryOnce
 │   │       └── playback + relocation           ResolveForPlayback, ManualRelocationWithMarker, ManualRelocationRefusesAnotherRootsFolder,
 │   │                                           ManualRelocationWithoutMarkerChecksASample, UnreadableSubfolderKeepsItsEntries
+│   ├── player/
+│   │   ├── library_test.cpp                    7 TESTs (PlayerLibraryTest): StatesAreZerosUntilPlayedOrLikedInTheAskedOrder, LikeUnlikeLikeAgain,
+│   │   │                                       ViewedOnlyEverTurnsOn, PlaysAreCounted, SettingsRoundTripWithLimitsAndBadValues, ARowGoesWithItsEntry,
+│   │   │                                       MigrationTwoTurnsSubtitlesOnUnlessChosenSince
+│   │   └── player_test.cpp                     16 TESTs (PlayerTest, real libmpv headless + generated files): PlaysTheQueueInOrderAndCountsEachPlay, MpvWritesItsLogWhenAsked,
+│   │                                           PromptActionsAddAndClearAndPlay, AnOfflineFileIsReportedOnceAndSkipped, NothingPlayableStopsInsteadOfLooping,
+│   │                                           ACorruptFileIsSkipped, PauseSeekPreviousAndNext, VideoResumesUntilViewed, MusicStartsAtTheBeginningByDefault,
+│   │                                           VolumeAndMuteAreRemembered, CommandsReturnAtOnceWhileADriveSpinsUp, RemovingTheNextOrTheCurrentItem,
+│   │                                           MastersResolverSaysOfflineAndMissing, SubtitlesStartOnWithTheFirstFullTrack,
+│   │                                           SubtitlesFromAFileNextToTheVideoAndPreferredLanguagesWin, SubtitlesOffMeansNone
 │   └── master/
 │       ├── metadata_pass_test.cpp              8 TESTs (MetadataPassTest, real files): TwoDrivesSyncAndReadInParallel, OneDriveAtATimeWhenTheSettingSaysSo, ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
 │       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, EachMovieFindsItsPosterInAFlatFolder, CancelStopsThePassAndTheRestWaits
@@ -382,7 +427,9 @@ hoardor/
 │   ├── audio/
 │   │   └── query_benchmark.cpp                 catalog(): N synthetic tracks (10/album, 20 albums/artist, 40 genres) stored via audio::Library;
 │   │                                           BM_AlbumsFirstPageByName, BM_AlbumsMiddlePageByName, BM_AlbumsFirstPageNewestAdded, BM_AlbumsOfAGenre,
-│   │                                           BM_TracksOfAnAlbum, BM_TracksMiddlePageByTitle, BM_AlbumCount, BM_TrackCount, BM_PendingCountWhenNothingIsPending
+│   │                                           BM_TracksOfAnAlbum, BM_TracksMiddlePageByTitle, BM_AlbumCount, BM_TrackCount, BM_PendingCountWhenNothingIsPending,
+│   │                                           BM_SearchKeystroke/0..5 (what TYLI's search asks per keystroke, for "t" … "album 61"),
+│   │                                           BM_SearchPart/0..4 (its parts: album count/page, track count/page by title/unordered)
 │   └── file/
 │       ├── scanner_benchmark.cpp               BM_Scan: full scan of the tree
 │       └── sync_benchmark.cpp                  struct Synced, fn fresh_library() (DB file + Library + one root, settle window 0);

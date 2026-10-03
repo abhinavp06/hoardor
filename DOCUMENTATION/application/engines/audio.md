@@ -18,6 +18,7 @@ Not in scope:
 - **Every track can be listed:**
   - a missing title falls back to the file name, a missing album to the folder name; both are flagged
   - a missing album artist falls back to the first artist, then "Unknown artist"
+- **What counts as audio:** a sample rate and channels. An unknown length (0) is fine, for example a FLAC whose STREAMINFO says 0 samples, which some encoders write. Such files were rejected as "not a playable audio file" until 2026-10-03; audio migration 3 retries them.
 - **Unreadable files** get a row with `read_error`. They're left out of every query and not retried until their size or mtime changes.
 - **Text is stored twice:** exactly as tagged for display, and as a `core::sort_key` for filters, order, and grouping. The key ignores ASCII case and a leading article, and sorts numbers naturally. A sort tag (`ALBUMARTISTSORT`, …) replaces the value in the key.
 - **Artists and genres** can have several values per track. They're `audio_names` rows linked through `audio_track_names`, so "albums of genre X" starts from that genre's rows.
@@ -27,9 +28,9 @@ Not in scope:
 
 - **Public API:** `include/hoardor/audio/audio.hpp`:
   - `TrackInfo`, `read`, `embedded_cover`
-  - `Field`, `Condition`, `Filter`, `Order`, `Track`, `Group`, `GroupOrder`, `PendingEntry`
+  - `Field`, `Condition` (a value, or `none`: "has nothing in this field", since 2026-10-03), `Filter`, `Order`, `Track`, `Group`, `GroupOrder`, `PendingEntry`
   - `Library`: `open`, `pending`, `pending_count`, `store`, `store_error`, `remove_unused_names`, `tracks`, `groups`, `count`, `group_count`, `track`
-- **Tables:** `audio_tracks`, `audio_names`, `audio_track_names` (audio migration 1, `DATABASE.md`).
+- **Tables:** `audio_tracks`, `audio_names`, `audio_track_names`, `audio_search` (audio migrations 1–3, `DATABASE.md`).
 - **Shared internals:** `src/media/` (the ffmpeg layer and the query builder, shared with `video`) and `src/core/text` (sort keys).
 - **Performance** (50k tracks, Release, this VM; `features/media_listing.md` §7):
   - an album page by name anywhere in the list in about 3.5 ms

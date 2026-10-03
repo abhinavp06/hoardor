@@ -109,6 +109,48 @@ void BM_TrackCount(benchmark::State& state) {
     for (auto _ : state) benchmark::DoNotOptimize(c.tracks->count({}));
 }
 
+// What TYLI's search page asks per keystroke (qml/SearchView.qml): albums and artists (each a
+// count and a first page) and tracks (a count and a first page by title), filtered by the
+// typed text. Short prefixes match most of the library ("t" matches every "Track N").
+const std::vector<std::string> search_texts{"t", "tr", "track", "track 1", "artist 3", "album 61"};
+
+void BM_SearchKeystroke(benchmark::State& state) {
+    auto& c = catalog();
+    const std::string& text = search_texts[static_cast<std::size_t>(state.range(0))];
+    state.SetLabel("\"" + text + "\"");
+    const audio::Filter filter{{{Field::Search, audio::Value{text}}}};
+    const std::vector<Field> albums{Field::Category, Field::AlbumArtist, Field::Album};
+    const std::vector<Field> artists{Field::Category, Field::AlbumArtist};
+    const std::vector<audio::Order> by_title{{Field::Title}};
+    for (auto _ : state) {
+        benchmark::DoNotOptimize(c.tracks->group_count(albums, filter));
+        benchmark::DoNotOptimize(c.tracks->groups(albums, filter, audio::GroupOrder::Values, false, std::nullopt, 100));
+        benchmark::DoNotOptimize(c.tracks->group_count(artists, filter));
+        benchmark::DoNotOptimize(c.tracks->groups(artists, filter, audio::GroupOrder::Values, false, std::nullopt, 100));
+        benchmark::DoNotOptimize(c.tracks->count(filter));
+        benchmark::DoNotOptimize(c.tracks->tracks(filter, by_title, std::nullopt, 100));
+    }
+}
+
+// The keystroke's parts, one at a time, for "track" (matches every track).
+void BM_SearchPart(benchmark::State& state) {
+    auto& c = catalog();
+    const audio::Filter filter{{{Field::Search, audio::Value{std::string("track")}}}};
+    const std::vector<Field> albums{Field::Category, Field::AlbumArtist, Field::Album};
+    const std::vector<audio::Order> by_title{{Field::Title}};
+    const char* names[]{"album count", "album page", "track count", "track page by title", "track page unordered"};
+    state.SetLabel(names[state.range(0)]);
+    for (auto _ : state) {
+        switch (state.range(0)) {
+        case 0: benchmark::DoNotOptimize(c.tracks->group_count(albums, filter)); break;
+        case 1: benchmark::DoNotOptimize(c.tracks->groups(albums, filter, audio::GroupOrder::Values, false, std::nullopt, 100)); break;
+        case 2: benchmark::DoNotOptimize(c.tracks->count(filter)); break;
+        case 3: benchmark::DoNotOptimize(c.tracks->tracks(filter, by_title, std::nullopt, 100)); break;
+        case 4: benchmark::DoNotOptimize(c.tracks->tracks(filter, {}, std::nullopt, 100)); break;
+        }
+    }
+}
+
 void BM_PendingCountWhenNothingIsPending(benchmark::State& state) {
     auto& c = catalog();
     for (auto _ : state) benchmark::DoNotOptimize(c.tracks->pending_count(std::nullopt));
@@ -125,3 +167,5 @@ BENCHMARK(BM_TracksMiddlePageByTitle)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_AlbumCount)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_TrackCount)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_PendingCountWhenNothingIsPending)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_SearchKeystroke)->DenseRange(0, 5)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_SearchPart)->DenseRange(0, 4)->Unit(benchmark::kMillisecond);

@@ -23,7 +23,7 @@ Rationale:
 hoardor is divided into engines, each in its own namespace with its own rules:
 
 - `file`: library roots and their identity, on-demand scanning, change detection, and resolving files to paths.
-- `audio`, `video`, `graphics`, `text`: planned.
+- `audio`, `video`: metadata (built in `v0.2.0`). `player`: playback through libmpv (built 2026-10-03, `engines/player.md`). `graphics`, `text`: planned.
 - `master`: orchestrates the other engines.
 - `db`: **infrastructure, not a feature engine**. See §3.
 - `core`: **infrastructure, not a feature engine**. Shared building blocks such as an event bus, ring buffers, and queues. Plain standard C++ with no third-party dependencies. See below.
@@ -110,7 +110,7 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
   - sync peak memory of 6.4 MB at 5k files and 7.7 MB at 50k
   - not measured yet: a cold HDD, which needs the user's drive and `hoardor_sync`
   - **at 500k files:** a scan in 4.1 s, an incremental sync in 7.3 s, a first sync in 8.7 s; benchmark-process peak memory of 8,576 KB vs 8,456 KB at 50k. Time is linear and memory is flat (`HOARDOR_BENCH_FILES=500000`)
-- **Sanitizers:** the suite also runs clean under AddressSanitizer and ThreadSanitizer. The steps are in `CLAUDE.md` ("Build and test").
+- **Sanitizers:** the suite also runs clean under AddressSanitizer and ThreadSanitizer (checked again on 2026-10-03 with the player, then with posters, frames, and filters: 230 pass, 3 permission tests skip as root). ThreadSanitizer suppresses SQLite's WAL index and ffmpeg's decoder threads inside libmpv (`tests/tsan.supp`). The steps are in `CLAUDE.md` ("Build and test").
 
 ## Decision log
 
@@ -148,3 +148,7 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
 | 2026-10-02 | `DATABASE.md` is the single reference for every table, column, index, and migration. Feature docs propose schema changes, and `DATABASE.md` is updated when they're built. |
 | 2026-10-02 | Sync and metadata reading run **one worker per physical drive** (`file::device_of`: Linux block device, Windows disk number), up to `parallel_devices` (default 4), each on its own SQLite connection. This implements §6's "parallelism per physical device". Several workers per SSD are not done yet. ThreadSanitizer runs with `tests/tsan.supp` (SQLite's lock-free WAL index). |
 | 2026-10-03 | No Books category by default until text has its own build (the user). File migration 3 deletes the seeded one only when untouched (no folders, default kinds). Text stays a supported file kind, and a Books category can be added by hand. |
+| 2026-10-03 | **The player runs on libmpv** (the user's choice over Qt Multimedia in TYLI, and over our own ffmpeg + miniaudio), wrapped by a new engine `hoardor::player` with no Qt. Video frames go through mpv's OpenGL render API to the app. The queue holds entry ids, resolved one at a time through an injected resolver. *Proposed, pending approval of `features/player.md`:* the rest of the design. |
+| 2026-10-03 | **Posters when a folder has none** (the user: "Plex's posters, and a frame as the fallback"): hoardor reads the posters Plex Media Server already downloaded, from Plex's database and files on the same machine, **read-only** (`db::Database::open_read_only`). That's still offline, and extends the 2026-10-02 sources row. Anything else gets a still frame from the video (`video::grab_frame`, ffmpeg's libswscale). `features/posters.md`. |
+| 2026-10-03 | **The player design was approved and built** (`features/player.md`, phases 1–4): `player::Player` (one libmpv session on its own thread), `player::Library` (`player_items`, `player_settings`, likes), and `master::file_resolver`. libmpv decodes and outputs sound, so `core`'s anticipated ring buffer ("audio playback") isn't needed for it. |
+

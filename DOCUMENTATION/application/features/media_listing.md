@@ -104,6 +104,7 @@ Phases 2 and 3 can swap if the user wants movies first.
      - `S01E02`, `1x02`, or `Season 1/…` for episodes, with the show from the folder above the season folder
 - **Movie or episode:** an `<episodedetails>` nfo, a season or episode number, or an `SxxEyy` name means an episode. Everything else in the category is a movie. TYLI decides which categories it shows as movies or as shows.
 - **Posters:**
+  - **since 2026-10-03, when there's none of these:** Plex's poster, else a frame (`features/posters.md`)
   - from companions, for a movie: `<name>-poster`, `<name>` (Plex's poster next to a movie in a shared folder, added 2026-10-03), `poster`, `folder`, `cover`, `movie`; for an episode: the show's `poster`/`folder`/`cover`/`show` up the tree, then the season folder's. `season01-poster` and `fanart` (a backdrop) later
   - otherwise an embedded poster: an MP4 cover, or a Matroska image attachment named `cover.*`, else one with "cover" or "poster" in its name (`small_cover.jpg`, `cover_land.jpg`; widened 2026-10-03). Fonts and other attachments never count
 - **Which companions (2026-10-03):** `master` asks `file::Library::companions` only for the names above (`video::companion_prefixes(path)`: `<name>.`, `<name>-poster.`, `poster.`, `folder.`, `cover.`, `movie.`, `show.`, `season.`, `tvshow.`). Before, it read the first 200 companions of the folder, so in a shared folder of hundreds of movies most never saw their own poster or `.nfo` (the user's Windows test: most movie and show covers missing). Video migration 3 reads every video once more.
@@ -118,7 +119,7 @@ Phases 2 and 3 can swap if the user wants movies first.
 
 ## 5. Generic query API
 
-The same shape in `audio` and `video`: **filter** by fields (equality, ANDed), **order** by fields, **group** by fields with aggregates, **count**, and keyset **cursors**. No layout is built in. An "album" is just a group by (album artist, album). Field names are an enum, and SQL is built from fixed fragments, never from caller strings.
+The same shape in `audio` and `video`: **filter** by fields (equality, ANDed; or, with `Condition::none`, "has nothing in this field", added 2026-10-03 for "no director" / "no genre" sections), **order** by fields, **group** by fields with aggregates, **count**, and keyset **cursors**. No layout is built in. An "album" is just a group by (album artist, album). Field names are an enum, and SQL is built from fixed fragments, never from caller strings.
 
 ```cpp
 namespace hoardor::audio {

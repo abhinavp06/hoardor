@@ -67,10 +67,12 @@ DOCUMENTATION/
 
 ## Build and test
 
-hoardor needs ffmpeg's development files (metadata reading):
-- **Linux:** `apt install libavformat-dev libavcodec-dev libavutil-dev ffmpeg`. The `ffmpeg` command-line tool generates test media; tests that need it skip without it.
-- **macOS:** `brew install ffmpeg`.
-- **Windows:** a shared LGPL build (e.g. BtbN's `win64-lgpl-shared`), passed with `-DFFMPEG_ROOT=<folder with include/ lib/ bin/>`, its `bin` on `PATH`.
+hoardor needs ffmpeg's development files (metadata reading, frame grabs) and libmpv's (playback):
+- **Linux:** `apt install libavformat-dev libavcodec-dev libavutil-dev libswscale-dev ffmpeg libmpv-dev`. The `ffmpeg` command-line tool generates test media; tests that need it skip without it.
+- **macOS:** `brew install ffmpeg mpv`.
+- **Windows:**
+  - **ffmpeg:** a shared LGPL build (e.g. BtbN's `win64-lgpl-shared`), passed with `-DFFMPEG_ROOT=<folder with include/ lib/ bin/>`, its `bin` on `PATH`.
+  - **libmpv:** a "dev" build (e.g. shinchiro's `mpv-dev-x86_64-*.7z`) with an MSVC `mpv.lib` made from the DLL's exports (`dumpbin /exports` → `.def` → `lib /def`; TYLI's workflow shows how), passed with `-DMPV_ROOT=<folder with include/ lib/ bin/>`.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -85,8 +87,9 @@ Build options in the root `CMakeLists.txt`: `BUILD_PLAYGROUND`, `BUILD_TESTS`, `
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON -DBUILD_TESTS=OFF
 cmake --build build-release -j && ./build-release/benchmarks/hoardor_benchmarks
 
-# Sanitizers (san = address or thread). On recent kernels ThreadSanitizer needs ASLR off: prefix with `setarch $(uname -m) -R`.
-# ThreadSanitizer also needs TSAN_OPTIONS=suppressions=tests/tsan.supp (SQLite's lock-free WAL index, see the file).
+# Sanitizers (san = address or thread). On recent kernels ThreadSanitizer needs ASLR off: prefix with `setarch $(uname -m) -R`,
+# for the build too (CMake's test discovery runs the binary, and deletes it if that fails).
+# ThreadSanitizer also needs TSAN_OPTIONS=suppressions=tests/tsan.supp (SQLite's lock-free WAL index, ffmpeg's decoder threads in libmpv; see the file).
 cmake -S . -B build-$san -DCMAKE_BUILD_TYPE=Debug -DRUN_TESTS_AFTER_BUILD=OFF \
       -DCMAKE_CXX_FLAGS=-fsanitize=$san -DCMAKE_C_FLAGS=-fsanitize=$san -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=$san
 ```

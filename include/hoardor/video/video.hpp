@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -80,6 +81,47 @@ std::vector<std::string> companion_prefixes(const std::filesystem::path& file);
 // A poster stored inside the file (a Matroska "cover" attachment, or an MP4 cover), or empty.
 Result<std::vector<std::byte>> embedded_poster(const std::filesystem::path& file);
 
+// ---------------------------------------------------------------- Posters when a folder has none
+// (features/posters.md)
+
+// One decoded picture, RGB24 with rows packed (width * 3 bytes each).
+struct Frame {
+    int width = 0, height = 0;
+    std::vector<std::byte> rgb;
+};
+
+inline constexpr double default_frame_positions[] = {0.15, 0.30, 0.50};
+
+// A still from the video, for a poster (touches the drive). Tries each position (a fraction of
+// the length) until a frame isn't nearly black; all dark: the last one. At most `max_height`
+// pixels high, keeping the shape.
+Result<Frame> grab_frame(const std::filesystem::path& file, std::span<const double> at = default_frame_positions,
+                         int max_height = 480);
+
+// The posters Plex Media Server already downloaded, read from its own database and files
+// (read-only; never written). Plex keeps art in its data folder, not next to the videos.
+class PlexPosters {
+public:
+    // Plex's data folder on this machine (the one holding its library database), if any.
+    static std::optional<std::filesystem::path> find_folder();
+    // Reads Plex's database once into an indexed table on this side; Plex can keep running.
+    static Result<PlexPosters> open(const std::filesystem::path& plex_folder);
+
+    // The poster image Plex chose for this video's movie (an episode: its show, else its
+    // season), if Plex knows the file and has the image on disk. Matched by the last folder
+    // and the file name, so another drive letter still matches.
+    std::optional<std::filesystem::path> poster(const std::filesystem::path& video_file);
+
+    PlexPosters(PlexPosters&&) noexcept;
+    PlexPosters& operator=(PlexPosters&&) noexcept;
+    ~PlexPosters();
+
+private:
+    struct State;
+    explicit PlexPosters(std::unique_ptr<State> state);
+    std::unique_ptr<State> state_;
+};
+
 // ---------------------------------------------------------------- Queries
 
 enum class Field : std::uint8_t {
@@ -94,6 +136,9 @@ using Value = std::variant<std::int64_t, std::string>;
 struct Condition {
     Field field;
     Value value;  // Type: 1 movie, 2 episode
+    // Instead of `value`: items with nothing in this field (no director, no genre, an empty
+    // text, 0), e.g. the "no director" section of a grid by director.
+    bool none = false;
 };
 
 struct Filter {
@@ -139,6 +184,7 @@ struct Group {
     EntryId poster_entry = 0;         // a companion image, if any item has one
     EntryId embedded_poster_entry = 0;  // else a video with a poster inside it
     bool any_online = false;
+    EntryId first_entry = 0;          // the first episode (lowest season, then episode); any copy of a movie
 };
 
 enum class GroupOrder : std::uint8_t { Values, AddedLast, Year, Items };
