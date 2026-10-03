@@ -2,6 +2,36 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### FLACs with an unknown length were rejected; sanitizer run; docs audit (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** The user asked whether every document keeps up with the features. The audit included running the suite under AddressSanitizer, which had not been done since the player arrived. That run failed one test, `AudioRead.EmbeddedCover`, and the failure was a real bug.
+- **The bug:** `audio::read` rejected a FLAC whose STREAMINFO says 0 total samples ("length unknown") as "not a playable audio file". ffmpeg writes such files when it adds a cover picture this way, and some encoders do too. mpv plays them.
+- **Why no test caught it:** the test read `audio::read(with)->has_embedded_cover` without checking the result. On an error that's undefined behaviour, and the normal build happened to see a non-zero byte. Five more tests used the same unchecked pattern; all now check first.
+- **Fix:** audio needs a sample rate and channels (junk files have neither, so they're still rejected). An unknown length is stored as 0.
+- **Audio migration 3** retries, once, every row rejected with exactly that message. Unreadable rows are otherwise only retried when their file changes, so the user's affected files would never have come back.
+- **AddressSanitizer:** the whole suite runs clean, with no memory errors and no leaks (209 passed; 3 permission tests skipped as root). That includes the 18 player tests on real libmpv threads.
+
+**Docs audit (hoardor)**
+- **`CODE_TREE.md`:** lists every file in the repository (checked by script against `git ls-files`).
+- **`DATABASE.md`:** its migration history matches every `migrations` array in the code (file 1–3, audio 1–3, video 1–3, player 1). Its diagram and tables include `player_items` and `player_settings`.
+- **Fixed:**
+  - `engines/master.md` lacked the playback resolver (§1b, new)
+  - ARCHITECTURE still called the player "designed", with its decision "pending approval" (now built, with a new row; the anticipated `core` ring buffer isn't needed for playback)
+  - `engines/audio.md`: the "what counts as audio" rule
+
+**Tests:** 212 pass (2 new).
+- `AudioRead.UnknownLengthIsStillATrack`
+- `AudioLibraryTest.MigrationThreeRetriesRejectedTracksOnce`: only the "not a playable" row becomes pending, not another kind of error.
+
+**Files**
+- `src/audio/read.cpp`, `src/audio/library.cpp` (migration 3)
+- `tests/audio/read_test.cpp`, `tests/audio/library_test.cpp`, `tests/video/read_test.cpp`
+- `DOCUMENTATION/application/{ARCHITECTURE.md, DATABASE.md, CODE_TREE.md, CODE_TREE.html, engines/master.md, engines/audio.md}`
+
+**Follow-ups**
+- **ThreadSanitizer:** the player's threads under ThreadSanitizer, with any mpv entries in `tests/tsan.supp`.
+- **Unknown lengths:** they stay 0 in the library. mpv measures the length when the file plays; storing that back is a possible follow-up.
+
 ### Benchmarks: what a search keystroke costs (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** The user found TYLI's search slow, so the 50k-track audio benchmark gained:

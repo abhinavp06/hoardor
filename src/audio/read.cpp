@@ -77,9 +77,11 @@ Result<TrackInfo> read(const std::filesystem::path& file) {
     else if (t.lossless && p->bits_per_coded_sample > 0) t.bit_depth = p->bits_per_coded_sample;
     else if (t.lossless) t.bit_depth = av_get_bytes_per_sample(static_cast<AVSampleFormat>(p->format)) * 8;
     t.duration_ms = media->duration_ms(stream);
-    // ffmpeg guesses a format even for random bytes (often "mp3"); without a sample rate and a
-    // length there is nothing to play.
-    if (t.sample_rate <= 0 || t.duration_ms <= 0) return std::unexpected(Error{"not a playable audio file"});
+    // ffmpeg guesses a format even for random bytes (often "flac" or "mp3"), with no sample rate
+    // or channels: then there is nothing to play. An unknown length is fine: a FLAC whose header
+    // says "0 samples" (some encoders, and ffmpeg itself when it adds a cover) still plays, and
+    // its length stays 0 until something measures it (2026-10-03; such files were rejected).
+    if (t.sample_rate <= 0 || t.channels <= 0) return std::unexpected(Error{"not a playable audio file"});
 
     std::int64_t bits_per_second = p->bit_rate > 0 ? p->bit_rate : media->context()->bit_rate;
     if (bits_per_second <= 0 && t.duration_ms > 0) {

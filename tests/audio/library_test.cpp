@@ -403,3 +403,19 @@ TEST_F(AudioLibraryTest, SearchFindsWordPrefixesAcrossFieldsIgnoringAccents) {
     EXPECT_EQ(found("radio"), 0u);
     EXPECT_EQ(found("bjork"), 0u);
 }
+
+TEST_F(AudioLibraryTest, MigrationThreeRetriesRejectedTracksOnce) {
+    put("a.flac");
+    put("b.flac");
+    sync_music();
+    ASSERT_TRUE(tracks->store_error(ids.at("a.flac").id, 1, old_mtime, "not a playable audio file"));
+    ASSERT_TRUE(tracks->store_error(ids.at("b.flac").id, 1, old_mtime, "Invalid data found when processing input"));
+    ASSERT_EQ(tracks->pending_count(std::nullopt).value(), 0u);
+    // A database from before migration 3.
+    ASSERT_TRUE(db->exec("UPDATE db_migrations SET version = 2 WHERE component = 'audio'"));
+    ASSERT_TRUE(audio::Library::open(*db).has_value());
+    const auto pending = tracks->pending(std::nullopt, 0, 10).value();
+    ASSERT_EQ(pending.size(), 1u);   // only the one rejected for having no length
+    EXPECT_EQ(pending[0].entry_id, ids.at("a.flac").id);
+}
+

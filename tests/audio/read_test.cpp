@@ -129,13 +129,30 @@ TEST_F(AudioRead, EmbeddedCover) {
     const fs::path without = dir.path() / "without.flac";
     ASSERT_TRUE(make_media(with, {.cover = true}));
     ASSERT_TRUE(make_media(without, {}));
-    EXPECT_TRUE(audio::read(with)->has_embedded_cover);
+    const auto read = audio::read(with);
+    ASSERT_TRUE(read.has_value()) << read.error().message;
+    EXPECT_TRUE(read->has_embedded_cover);
     const auto bytes = audio::embedded_cover(with);
     ASSERT_TRUE(bytes.has_value()) << bytes.error().message;
     ASSERT_GT(bytes->size(), 2u);
     EXPECT_EQ((*bytes)[0], std::byte{0xFF});  // JPEG
     EXPECT_EQ((*bytes)[1], std::byte{0xD8});
-    EXPECT_TRUE(audio::embedded_cover(without)->empty());
+    const auto none = audio::embedded_cover(without);
+    ASSERT_TRUE(none.has_value()) << none.error().message;
+    EXPECT_TRUE(none->empty());
+}
+
+// A FLAC whose STREAMINFO says 0 total samples ("unknown length"): ffmpeg writes one when it
+// adds a cover picture this way. It's still a track, with no length, not "unplayable".
+TEST_F(AudioRead, UnknownLengthIsStillATrack) {
+    HOARDOR_SKIP_WITHOUT_FFMPEG();
+    const fs::path f = dir.path() / "unknown_length.flac";
+    ASSERT_TRUE(make_media(f, {.tags = {{"title", "Still a track"}}, .cover = true}));
+    const auto t = audio::read(f);
+    ASSERT_TRUE(t.has_value()) << t.error().message;
+    EXPECT_EQ(t->title, "Still a track");
+    EXPECT_EQ(t->sample_rate, 44100);
+    EXPECT_GE(t->duration_ms, 0);
 }
 
 TEST_F(AudioRead, UnreadableAndMissingFiles) {

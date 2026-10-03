@@ -295,7 +295,7 @@ hoardor/
 │       ├── playback.cpp                        file_resolver
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 210 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 212 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -309,9 +309,9 @@ hoardor/
 │   │   └── text_test.cpp                       6 TESTs: SortKey.{NumbersSortNaturally, LeadingZerosDontMatter, AVeryLongNumberStillSorts,
 │   │                                           CaseAndArticlesAreIgnored, NumbersBeforeLetters_UnicodeKept}, SplitValues.SeparatorsTrimmingAndDuplicates
 │   ├── audio/
-│   │   ├── read_test.cpp                       7 TESTs (AudioRead): FlacTagsAndHiResStream, Mp3AtConstantBitRate, M4aOggOpusAndWav (+ ALAC),
-│   │   │                                       MissingTagsFallBackToNames, UnicodeNamesAndTags, EmbeddedCover, UnreadableAndMissingFiles
-│   │   └── library_test.cpp                    14 TESTs (AudioLibraryTest): SearchFindsWordPrefixesAcrossFieldsIgnoringAccents, PendingListsSettledUnreadAudioOnly, ChangedFilesBecomePendingAgain,
+│   │   ├── read_test.cpp                       8 TESTs (AudioRead): FlacTagsAndHiResStream, Mp3AtConstantBitRate, M4aOggOpusAndWav (+ ALAC),
+│   │   │                                       MissingTagsFallBackToNames, UnicodeNamesAndTags, EmbeddedCover, UnknownLengthIsStillATrack, UnreadableAndMissingFiles
+│   │   └── library_test.cpp                    15 TESTs (AudioLibraryTest): MigrationThreeRetriesRejectedTracksOnce, SearchFindsWordPrefixesAcrossFieldsIgnoringAccents, PendingListsSettledUnreadAudioOnly, ChangedFilesBecomePendingAgain,
 │   │                                           OfflineRootsHaveNoPendingWorkButStillList, UnreadableFilesAreRecordedNotListedNotRetried,
 │   │                                           StoredFieldsComeBack, FilterIgnoresCaseAndArticles_OrderByDiscAndTrack,
 │   │                                           PagingVisitsEveryTrackOnceInEveryOrder, AlbumsAreGroupsInEveryOrder, ManyArtistsAndGenresPerTrack,

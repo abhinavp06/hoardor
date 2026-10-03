@@ -63,10 +63,14 @@ TEST_F(VideoRead, HdrIsRecognized) {
     const fs::path f = dir.path() / "hdr.mkv";
     ASSERT_TRUE(make_video(f, "64x64", "-map 0:v -c:v libx264 -preset ultrafast -pix_fmt yuv420p10le "
                                        "-color_trc smpte2084 -color_primaries bt2020 -colorspace bt2020nc"));
-    EXPECT_EQ(video::read(f)->hdr, "HDR10");
+    const auto hdr10 = video::read(f);
+    ASSERT_TRUE(hdr10.has_value()) << hdr10.error().message;
+    EXPECT_EQ(hdr10->hdr, "HDR10");
     const fs::path hlg = dir.path() / "hlg.mkv";
     ASSERT_TRUE(make_video(hlg, "64x64", "-map 0:v -c:v libx264 -preset ultrafast -pix_fmt yuv420p10le -color_trc arib-std-b67"));
-    EXPECT_EQ(video::read(hlg)->hdr, "HLG");
+    const auto hlg_read = video::read(hlg);
+    ASSERT_TRUE(hlg_read.has_value()) << hlg_read.error().message;
+    EXPECT_EQ(hlg_read->hdr, "HLG");
 }
 
 TEST_F(VideoRead, NfoBeatsTagsAndNames_PosterIsPicked) {
@@ -166,11 +170,15 @@ TEST_F(VideoRead, EmbeddedPosterUnderOtherNamesButNeverAFont) {
     const std::string encode = "-map 0:v -c:v libx264 -preset ultrafast -pix_fmt yuv420p -attach " + quoted(jpg.string());
     const fs::path land = dir.path() / "land.mkv";  // Matroska's "small_cover" / "cover_land" names
     ASSERT_TRUE(make_video(land, "64x64", encode + " -metadata:s:t mimetype=image/jpeg -metadata:s:t filename=small_cover_land.jpg"));
-    EXPECT_TRUE(video::read(land)->has_embedded_poster);
+    const auto land_read = video::read(land);
+    ASSERT_TRUE(land_read.has_value()) << land_read.error().message;
+    EXPECT_TRUE(land_read->has_embedded_poster);
     EXPECT_EQ(video::embedded_poster(land)->size(), fs::file_size(jpg));
     const fs::path font = dir.path() / "font.mkv";  // an attachment called "cover" that isn't an image
     ASSERT_TRUE(make_video(font, "64x64", encode + " -metadata:s:t mimetype=font/ttf -metadata:s:t filename=cover.ttf"));
-    EXPECT_FALSE(video::read(font)->has_embedded_poster);
+    const auto font_read = video::read(font);
+    ASSERT_TRUE(font_read.has_value()) << font_read.error().message;
+    EXPECT_FALSE(font_read->has_embedded_poster);
 }
 
 TEST_F(VideoRead, NotAVideo) {

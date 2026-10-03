@@ -72,6 +72,20 @@ struct MetadataReport { std::uint64_t read, failed, skipped; bool cancelled; };
 - **At the end:** unused artist, genre, and person names are removed.
 - **Not run at startup on its own:** that would wake drives nobody asked for. An upgraded library is read on its first sync.
 
+## 1b. Playback: the resolver (Player, 2026-10-03)
+
+The `player` engine never calls the file engine, so `master` builds what it needs (`include/hoardor/master/playback.hpp`):
+
+```cpp
+// Resolves entries through a file::Library connection of its own, opened on first use (on the
+// player's thread). Errors in words: "its drive is offline", "the file is missing",
+// "it's no longer in the library".
+player::Resolver file_resolver(const std::filesystem::path& database_file);
+```
+
+- **Not yet:** `master` yielding a sync to playback on the same drive (`features/file_sync.md` OI-1), which waits for the cold-HDD measurement (`features/player.md` OI-P1).
+- **Tests:** `PlayerTest.MastersResolverSaysOfflineAndMissing`.
+
 ## 2. Tests
 
 `tests/master/sync_worker_test.cpp`:
