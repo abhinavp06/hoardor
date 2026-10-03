@@ -1,6 +1,6 @@
 # Master engine (`hoardor::master`)
 
-Status: **Built** (2026-10-01): the first slice, as part of File Sync v1, phase 2. 8 tests in `tests/master/sync_worker_test.cpp`. They pass 50 repeated runs, and ThreadSanitizer reports no races.
+Status: **Built** (2026-10-01): the first slice, as part of File Sync v1, phase 2. The metadata pass was added on 2026-10-02 (Media library v1, phase 4; tests in `tests/master/metadata_pass_test.cpp`). 8 tests in `tests/master/sync_worker_test.cpp`. They pass 50 repeated runs, and ThreadSanitizer reports no races.
 
 `master` coordinates the other engines (ARCHITECTURE §2). It's also where hoardor owns background execution (`features/file_sync.md` §4.10): engines expose blocking, thread-agnostic functions, and `master` runs them on hoardor's threads.
 
@@ -44,6 +44,33 @@ public:
 - **Connection:** the worker owns its own `db::Database` (opened in `start()`, used only by the worker thread), and its own `file::Library` on it.
 - **Duplicate requests:** a request whose scope equals the one running or any one queued is ignored. A global request while a category sync is running is still queued, since it covers more.
 - **Not yet:** an I/O priority for the worker, and yielding to playback (`features/file_sync.md` §6, OI-1). They wait for the measurement in OI-1.
+
+## 1a. Reading metadata after a sync (Media library v1, phase 4)
+
+After each requested sync, and unless it was cancelled, `SyncWorker` **queues a metadata job** for that scope (since 2026-10-02; it used to run inside the sync). The job reads the scope's audio and video files that are new, changed, or never read, on the same thread, while the drives are awake (`features/media_listing.md` §4.1).
+- **Syncs go ahead of metadata jobs.** A sync request pauses a running pass, which resumes after the sync.
+- **`syncing()` / `reading()`** tell them apart.
+- **One worker per physical drive** (since 2026-10-02):
+  - roots are grouped by `file::device_of` (injectable as `start(…, device_of)` for tests)
+  - up to `file::Settings::parallel_devices` drives at once, each worker with its own connection
+  - the same split applies to syncs and to metadata passes
+  - sync reports keep the roots' order
+
+```cpp
+struct MetadataProgress { std::uint64_t done, total; };
+struct MetadataReport { std::uint64_t read, failed, skipped; bool cancelled; };
+// SyncCallbacks gains: on_metadata_progress (at most every 250 ms) and on_metadata_finished(scope, report).
+```
+
+- **The work list:** `audio::Library::pending` / `video::Library::pending`. Settled entries in roots the sync found online.
+- **Paths:** resolved once per root. Videos also get their companions (`file::Library::companions(entry, 2, 200, video::companion_prefixes(path))`: only the names `video::read` uses, so a big shared folder never crowds out a movie's own poster).
+- **Writes** go in short batches (`batch_max_rows` / `batch_max_milliseconds`). Callbacks never run inside a write transaction.
+- **A failed read:**
+  - If the file or its root has gone (an unplugged drive), it's **skipped**, not recorded, and read on a later pass.
+  - Otherwise it's stored as unreadable (`store_error`) and not retried until it changes.
+- **`cancel()`** stops the pass. What was read is kept, and the rest stays pending.
+- **At the end:** unused artist, genre, and person names are removed.
+- **Not run at startup on its own:** that would wake drives nobody asked for. An upgraded library is read on its first sync.
 
 ## 2. Tests
 

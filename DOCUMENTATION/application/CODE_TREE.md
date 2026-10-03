@@ -6,7 +6,7 @@ One tree of the whole repository: every file, namespace, type, function, test, a
 - **Legend:** `ns` namespace · `class` / `struct` / `enum` types · `fn` free function · `.m()` member function · `static` static member · `(private)` not callable from outside the class · `(internal)` lives in `src/`, not part of the public API · `TEST` a GoogleTest case.
 - `DOCUMENTATION/notes/` is the user's personal folder and is left out on purpose.
 
-Last updated: 2026-10-01 (File Sync v1, branch `abhinavp06/FILE_SCANNER_INIT`).
+Last updated: 2026-10-02 (Media library v1 phases 1–4, branch `abhinavp06/MEDIA_LISTING`).
 
 ```text
 hoardor/
@@ -15,14 +15,58 @@ hoardor/
 ├── .gitignore                                  build*/, output/, IDE folders
 ├── CMakeLists.txt                              root build
 │   ├── options        BUILD_PLAYGROUND, BUILD_TESTS, RUN_TESTS_AFTER_BUILD (ON only when hoardor is the top-level project), BUILD_BENCHMARKS=OFF
-│   ├── target hoardor (static library)         src/db, src/file, src/master; links hoardor_sqlite3 (private), Threads
+│   ├── target hoardor (static library)         src/core, src/db, src/file, src/media, src/audio, src/video, src/master; links hoardor_sqlite3, hoardor_pugixml, hoardor_ffmpeg (private), Threads
 │   └── platform sources                        Windows: *_windows.cpp · Linux: file_info_posix + mount_points_linux · other: file_info_posix + mount_points_other
 │
 ├── third_party/
-│   └── CMakeLists.txt                          SQLite 3.46.1 amalgamation via FetchContent (SHA3-256 pinned)
-│       └── target hoardor_sqlite3 (static C)   SQLITE_DQS=0, SQLITE_DEFAULT_MEMSTATUS=0, SQLITE_OMIT_LOAD_EXTENSION
+│   └── CMakeLists.txt                          third-party code
+│       ├── target hoardor_sqlite3 (static C)   SQLite 3.46.1 amalgamation via FetchContent (SHA3-256 pinned); SQLITE_DQS=0, DEFAULT_MEMSTATUS=0, OMIT_LOAD_EXTENSION, ENABLE_FTS5
+│       ├── target hoardor_pugixml (static)     pugixml 1.14 (MIT, SHA-256 pinned): parses .nfo files
+│       └── target hoardor_ffmpeg (interface)   ffmpeg libavformat/avcodec/avutil (LGPL, shared): pkg-config on Linux/macOS, -DFFMPEG_ROOT on Windows
 │
 ├── include/hoardor/                            PUBLIC API (everything a consumer like TYLI may call)
+│   │
+│   ├── core/                                   ns hoardor::core: shared infrastructure, built on demand (ARCHITECTURE §2)
+│   │   └── page.hpp                            struct Cursor { key, id } (opaque keyset position) · template struct Page<T> { items, optional next }
+│   │
+│   ├── audio/
+│   │   └── audio.hpp                           ns hoardor::audio: the audio engine (engines/audio.md)
+│   │       ├── using EntryId / CategoryId / RootId, struct Error, using Result<T>
+│   │       ├── struct TrackInfo                tags as read (title, album, album_artist, artists[], genres[], sort tags, track/disc (+totals),
+│   │       │                                   date, year) + stream (duration_ms, bitrate_kbps, sample_rate, bit_depth, channels, codec,
+│   │       │                                   lossless, has_embedded_cover) + title_from_name, album_from_name
+│   │       ├── fn read(path) -> Result<TrackInfo>            ffmpeg; fallbacks: file name, folder name, first artist / "Unknown artist"
+│   │       ├── fn embedded_cover(path) -> Result<bytes>      the attached picture, or empty
+│   │       ├── enum Field                      Title, Artist, AlbumArtist, Album, Genre, Year, Disc, Track, Duration, Bitrate, SampleRate,
+│   │       │                                   BitDepth, Codec, Lossless, Added, Category, Root, Entry, Search (full-text filter)
+│   │       ├── using Value · struct Condition { field, value } · struct Filter { all[] } · struct Order { field, descending }
+│   │       ├── struct Track                    a stored track + root_id, root_online, added_ns, size
+│   │       ├── struct Group                    { values[], tracks, duration_ms, added_first/last_ns, year_min/max, cover_entry, any_online }
+│   │       ├── enum GroupOrder                 Values, AddedLast, Year, Tracks
+│   │       ├── struct PendingEntry             { entry_id, root_id, relative_path, size, mtime_ns }
+│   │       └── class Library                   static open(Database&) (audio migrations) · .pending(category, after, limit) · .pending_count(category)
+│   │                                           .store(entry, size, mtime, TrackInfo) · .store_error(entry, size, mtime, message) · .remove_unused_names()
+│   │                                           .tracks(filter, order, after, limit) · .groups(by, filter, order, desc, after, limit)
+│   │                                           .count(filter) · .group_count(by, filter) · .track(entry)
+│   │
+│   ├── video/
+│   │   └── video.hpp                           ns hoardor::video: the video engine (engines/video.md)
+│   │       ├── enum Type (Movie=1, Episode=2) · enum Source (Name=1, Tags=2, Nfo=3) · struct Stream { language, codec, channels, title }
+│   │       ├── struct VideoInfo                type, title, show, season, episode, year, date, plot, genres[], directors[], writers[],
+│   │       │                                   duration_ms, width, height, hdr, video_codec, frame_rate_milli, audio[], subtitles[],
+│   │       │                                   source, from_name, info_index, poster_index, has_embedded_poster
+│   │       ├── fn read(path, companions) -> Result<VideoInfo>   streams + (.nfo > tags > names) + poster pick
+│   │       ├── fn companion_prefixes(path) -> vector<string>      "<name>.", "<name>-poster.", "poster.", … for file::Library::companions
+│   │       ├── fn embedded_poster(path) -> Result<bytes>         attached picture or a Matroska image attachment ("cover.*", else *cover*/*poster*)
+│   │       ├── enum Field                      Type, Title, Year, Genre, Director, Show, Season, Episode, Duration, Height, Hdr, VideoCodec,
+│   │       │                                   Added, Category, Root, Entry, Search (full-text filter)
+│   │       ├── Value, Condition, Filter, Order, PendingEntry   (as in audio)
+│   │       ├── struct Item                     a stored movie/episode + poster_entry, has_embedded_poster, root_id, root_online, added_ns, size
+│   │       ├── struct Group                    { values[], items, duration_ms, added_first/last_ns, year_min/max, max_height, any_hdr,
+│   │       │                                     poster_entry, embedded_poster_entry, any_online }
+│   │       ├── enum GroupOrder                 Values, AddedLast, Year, Items
+│   │       └── class Library                   open · pending · pending_count · store(…, poster_entry) · store_error · remove_unused_names
+│   │                                           · items · groups · count · group_count · item
 │   │
 │   ├── db/
 │   │   └── database.hpp                        ns hoardor::db: SQLite mechanics (engines/db.md)
@@ -53,7 +97,7 @@ hoardor/
 │   │
 │   ├── file/                                   ns hoardor::file: the file engine (engines/file.md, features/file_sync.md)
 │   │   ├── settings.hpp
-│   │   │   ├── enum FileKind : uint8           Audio=1, Video=2, Text=3, Image=4, Subtitle=5 (stored in the DB, never renumber)
+│   │   │   ├── enum FileKind : uint8           Audio=1, Video=2, Text=3, Image=4, Subtitle=5, Info=6 (.nfo) (stored in the DB, never renumber)
 │   │   │   ├── fn to_string(FileKind)          "audio", "video", ...
 │   │   │   ├── fn file_kind_from_string(name)  inverse, ignoring case
 │   │   │   ├── struct Settings                 every tunable of the file engine (plain data, persisted in file_settings)
@@ -84,6 +128,8 @@ hoardor/
 │   │   │
 │   │   ├── mount_points.hpp
 │   │   │   ├── fn list_mount_points()          the OS's mounted volumes (implementations in src/file/platform/)
+│   │   │   ├── fn device_of(path) -> string    the physical drive holding a path (partitions of one disk match); "" if unknown
+│   │   │   ├── using DeviceLookup              std::function naming a path's device; tests inject fake drives
 │   │   │   └── using MountPointLister          std::function returning mount points; tests inject plain folders
 │   │   │
 │   │   └── library.hpp
@@ -94,7 +140,7 @@ hoardor/
 │   │       ├── enum RootStatus                 Unknown=0, Online=1, Offline=2
 │   │       ├── struct Root                     { id, uuid, category_id, name, path, path_in_volume, use_marker,
 │   │       │                                     case_sensitive, status, generation, last_sync_ns, file_count, held_removals }
-│   │       ├── struct Entry                    { id, root_id, relative_path, size, mtime_ns, kind, unsettled, changed_generation }
+│   │       ├── struct Entry                    { id, root_id, relative_path, size, mtime_ns, kind, unsettled, changed_generation, added_ns }
 │   │       ├── struct ScanErrorRecord          { root_id, relative_path, is_directory, message, generation }
 │   │       ├── enum RootSyncOutcome            Synced, Offline, Cancelled, Failed
 │   │       ├── struct RootSyncReport           { root_id, outcome, generation, added, modified, removed, unchanged,
@@ -113,8 +159,10 @@ hoardor/
 │   │           ├── sync ······· .sync(optional category, stop_token, progress) -> SyncReport   roots of a category, or all
 │   │           │                .sync_root(id, stop_token, progress) -> RootSyncReport
 │   │           │                .apply_held_removals(id)   applies removals the mass-removal guard held
-│   │           ├── reads ······ .entries(root, after, limit) · .changed_entries(root, generation, after, limit)   paged by id
+│   │           ├── reads ······ .entry(id) · .entries(root, after, limit) · .changed_entries(root, generation, after, limit)   paged by id
 │   │           │                .scan_errors(root, limit) · .resolve(entry) -> path | RootOffline | FileMissing   (playback)
+│   │           │                .companions(entry, parent_levels, limit, prefixes)   images, subtitles, .nfo in its folder (+ parents), nearest first;
+│   │           │                                                          with prefixes: one index lookup per name prefix (+ common spellings)
 │   │           ├── struct Resolution            (private) { online, relocated, reason }
 │   │           ├── .path_in_volume(path)        (private) path relative to its longest containing mount point
 │   │           ├── .check_overlap(path, except) (private) rejects nested / containing roots
@@ -123,19 +171,49 @@ hoardor/
 │   │
 │   └── master/
 │       └── sync_worker.hpp                     ns hoardor::master: background execution (engines/master.md)
-│           ├── struct SyncCallbacks            { on_progress(SyncProgress), on_finished(scope, SyncReport) }: run on the worker thread
+│           ├── struct MetadataProgress         { done, total, elapsed_ms }
+│           ├── struct MetadataReport           { read, failed, skipped, cancelled, elapsed_ms }
+│           ├── struct SyncCallbacks            { on_progress, on_finished, on_metadata_progress, on_metadata_finished }: run on the worker thread
 │           └── class SyncWorker                hoardor-owned background sync thread
 │               ├── static start(db_file, SyncCallbacks, MountPointLister) -> Result<unique_ptr<SyncWorker>>   own connection; queues a startup sync if enabled
 │               ├── ~SyncWorker()               cancels, then the jthread stops and joins
-│               ├── .request_sync(optional category) -> bool   false if that scope is already queued or running
+│               ├── .request_sync(optional category) -> bool   ahead of metadata jobs (pauses a running one); false if that scope's sync is queued or running
 │               ├── .cancel()                   stops the running sync (removes nothing) and clears the queue
-│               ├── .idle() / .wait_idle()
+│               ├── .idle() / .wait_idle() / .syncing() / .reading()
 │               ├── SyncWorker(Database, SyncCallbacks)   (private)
-│               ├── .run(stop_token)            (private) the worker loop: wait for a scope, run Library::sync, report
-│               └── members                     database_, library_, callbacks_, mutex_, changed_ (condition_variable_any),
-│                                               queue_ (deque<scope>), running_, current_ (stop_source), thread_ (jthread, last)
+│               ├── enum Kind (Sync, Metadata) · struct Job { kind, scope }   (private) the queue's jobs; syncs first
+│               ├── .run(stop_token)            (private) the worker loop: a sync (then queue its metadata job), or a metadata job (requeued if paused)
+│               ├── .sync(scope, stop)          (private) roots grouped by device, one worker (own connection) per drive, up to parallel_devices
+│               ├── .read_metadata(scope, stop) (private) the same split per drive: audio then video pending entries per root, short batches, skip gone files
+│               └── members                     database_, library_, audio_, video_, callbacks_, mutex_, changed_ (condition_variable_any),
+│                                               queue_ (deque<Job>), running_, current_ (stop_source), paused_, thread_ (jthread, last)
 │
 ├── src/                                        IMPLEMENTATION (internal helpers live here, not in include/)
+│   ├── core/
+│   │   └── text.hpp / text.cpp                 ns hoardor::core (internal): sort_key(text, articles) natural + article-free key,
+│   │                                           default_articles(), trim(text), split_values(text, separators)
+│   │
+│   ├── media/                                  ns hoardor::media (internal): shared by the audio and video engines
+│   │   ├── ffmpeg.hpp / ffmpeg.cpp             class Media (open(file, probe): header + bounded probe; context(), first_stream(type),
+│   │   │                                       attached_picture(), duration_ms(stream)) · FormatCloser · fn tag(dict, keys) · any_tag(media, keys)
+│   │   │                                       · number_pair("3/12") · year_of(date) · error_text(code); ffmpeg logging silenced
+│   │   └── query.hpp / query.cpp               the generic query builder: struct FieldSql { value, key, text, normalized, names_kind,
+│   │                                           link_extra, broad, search_table } · struct Schema { table, joins, id, base_where, link/names tables, fields,
+│   │                                           group_indexes } · Condition, Order, Built · fn items / groups / count / group_count ·
+│   │                                           bind_all · cursor_from · search_query(text) (words -> "word"* terms); (internal) encode/decode cursors, filter_sql (joins + where), after_sql
+│   │
+│   ├── audio/
+│   │   ├── read.cpp                            audio::read, audio::embedded_cover; (internal) is_lossless(codec), tag separators
+│   │   └── library.cpp                         audio::Library; (internal) schema_v1/migrations, schema() field map + group index hints,
+│   │                                           track_columns/read_track, group_aggregates, order_sql, pending_sql, join/split (one value per line)
+│   │
+│   ├── video/
+│   │   ├── sources.hpp / sources.cpp           ns video::detail (internal): struct Described · read_nfo(file) / parse_nfo(text) (pugixml;
+│   │   │                                       <movie>, <episodedetails>, <tvshow>; Kodi URL tail cut) · from_name(file) (SxxEyy, NxNN,
+│   │   │                                       "Season N/NN - Title", "Title (Year)", "Title.Year.…") · season_of_folder(name) · clean_name(text)
+│   │   ├── read.cpp                            video::read, video::embedded_poster; (internal) hdr_of, cover_attachment, pick_poster
+│   │   └── library.cpp                         video::Library; (internal) schema_v1, schema(), item_columns/read_item, streams_text/streams_from
+│   │
 │   ├── db/
 │   │   └── database.cpp                        Statement, Database, Transaction, migrate
 │   │       └── fn error_from(sqlite3*, rc)     (internal) SQLite error -> db::Error
@@ -166,8 +244,8 @@ hoardor/
 │   │   │   ├── fn root_columns() / read_root(Statement)     SELECT list + row -> Root
 │   │   │   ├── fn entry_columns() / read_entry(Statement)   SELECT list + row -> Entry
 │   │   │   └── fn set_root_status(Database&, id, RootStatus)
-│   │   ├── library.cpp                         Library: open, settings, categories, roots, relocation, entries, resolve
-│   │   │   ├── schema_v1 / migrations          (internal) file migration 1 (tables + seeded categories)
+│   │   ├── library.cpp                         Library: open, settings, categories, roots, relocation, entries, resolve, companions
+│   │   │   ├── schema_v1 / schema_v2 / migrations   (internal) file migrations 1 (tables + seeded categories) and 2 (added_ns, .nfo kind)
 │   │   │   ├── join_lines, split_lines, parse_int<Int>(text, out, min, max)   (internal) settings text format
 │   │   │   ├── serialize(Settings) / apply(Settings&, key, value)              (internal) Settings <-> file_settings rows
 │   │   │   ├── kinds_text(kinds) / parse_kinds(text)                           (internal) "audio,image" <-> kinds
@@ -186,19 +264,47 @@ hoardor/
 │   │       ├── file_info.hpp                   ns detail: struct FileInfo { size, mtime_ns }; fn file_info(directory_entry)
 │   │       ├── file_info_posix.cpp             one stat() (Linux st_mtim / macOS st_mtimespec)
 │   │       ├── file_info_windows.cpp           values cached by the directory listing (no system call)
-│   │       ├── mount_points_linux.cpp          list_mount_points from /proc/self/mountinfo; unescape(field) (\040 etc.)
+│   │       ├── device_linux.cpp                device_of: /sys/dev/block/MAJ:MIN -> the disk (a partition's parent)
+│       ├── device_windows.cpp              device_of: volume -> IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS disk number, else volume serial
+│       ├── device_other.cpp                device_of: st_dev (macOS until DiskArbitration)
+│       ├── mount_points_linux.cpp          list_mount_points from /proc/self/mountinfo; unescape(field) (\040 etc.)
 │   │       ├── mount_points_windows.cpp        list_mount_points from GetLogicalDriveStringsW
 │   │       └── mount_points_other.cpp          returns {} (macOS until file engine phase 4)
 │   │
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 116 tests, run by ctest)
-│   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target
+├── tests/                                      GoogleTest (target hoardor_tests, 192 tests, run by ctest)
+│   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
+│   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
+│   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
 │   ├── support/
 │   │   ├── temp_dir.hpp                        ns hoardor::test: class TempDir (unique temp folder; .path(), .write(relative, size)); fn u8path(utf8)
-│   │   └── library_fixture.hpp                 class LibraryTest : Test (in-memory DB + Library + injectable mounts);
-│   │                                           .category(name), .all_entries(root), .set_settings(edit)
+│   │   ├── library_fixture.hpp                 class LibraryTest : Test (in-memory DB + Library + injectable mounts);
+│   │   │                                       .category(name), .all_entries(root), .set_settings(edit)
+│   │   └── media_files.hpp                     ffmpeg_tool(), HOARDOR_SKIP_WITHOUT_FFMPEG(), quoted(), run_ffmpeg(args),
+│   │                                           struct MediaSpec + make_media(file, spec) (audio), make_video(file, size, options, inputs)
+│   ├── core/
+│   │   └── text_test.cpp                       6 TESTs: SortKey.{NumbersSortNaturally, LeadingZerosDontMatter, AVeryLongNumberStillSorts,
+│   │                                           CaseAndArticlesAreIgnored, NumbersBeforeLetters_UnicodeKept}, SplitValues.SeparatorsTrimmingAndDuplicates
+│   ├── audio/
+│   │   ├── read_test.cpp                       7 TESTs (AudioRead): FlacTagsAndHiResStream, Mp3AtConstantBitRate, M4aOggOpusAndWav (+ ALAC),
+│   │   │                                       MissingTagsFallBackToNames, UnicodeNamesAndTags, EmbeddedCover, UnreadableAndMissingFiles
+│   │   └── library_test.cpp                    14 TESTs (AudioLibraryTest): SearchFindsWordPrefixesAcrossFieldsIgnoringAccents, PendingListsSettledUnreadAudioOnly, ChangedFilesBecomePendingAgain,
+│   │                                           OfflineRootsHaveNoPendingWorkButStillList, UnreadableFilesAreRecordedNotListedNotRetried,
+│   │                                           StoredFieldsComeBack, FilterIgnoresCaseAndArticles_OrderByDiscAndTrack,
+│   │                                           PagingVisitsEveryTrackOnceInEveryOrder, AlbumsAreGroupsInEveryOrder, ManyArtistsAndGenresPerTrack,
+│   │                                           CopiesInTwoQualitiesAreOneGroup, RemovingFilesRemovesTheirTracksAndUnusedNames,
+│   │                                           CategoryAndRootFilters, BadRequestsAreErrors
+│   ├── video/
+│   │   ├── sources_test.cpp                    7 TESTs: Nfo.{Movie, EpisodeAndShow, KodiUrlAfterTheXmlAndBrokenFiles, ReadsFromDiskIncludingUtf8},
+│   │   │                                       Names.{Episodes, Movies, SeasonFoldersAndCleaning}
+│   │   ├── read_test.cpp                       10 TESTs (VideoRead): StreamsLanguagesAndTags, HdrIsRecognized, NfoBeatsTagsAndNames_PosterIsPicked,
+│   │   │                                       EpisodeFromNamesWithTheShowsNfoAndPoster, MovieFromNameOnly, EmbeddedPosterAttachment, PosterNamedLikeTheMovie,
+│   │   │                                       EmbeddedPosterUnderOtherNamesButNeverAFont, NotAVideo; VideoCompanionPrefixes.TheFilesOwnNameThenTheCommonNames
+│   │   └── library_test.cpp                    9 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
+│   │                                           DirectorsGenresAndWriters, PostersComeFromCompanionImagesThatStillExist, PendingAndErrorsAndStreams,
+│   │                                           MigrationThreeReadsEveryVideoAgain, PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved
 │   ├── db/
 │   │   └── database_test.cpp                   12 TESTs
 │   │       ├── Database.*                      OpensInMemoryWithForeignKeysOn, OpensFileInWalMode, OpenFailsForImpossiblePath, ReportsSqlErrors
@@ -239,8 +345,13 @@ hoardor/
 │   │   │   │                                   RootWithoutMarkerWritesNothing, ReadOnlyFolderFallsBackToNoMarker,
 │   │   │   │                                   RootCategoryCanChangeButOnlyToAnExistingOne, RemoveRootKeepsItsMarkerOnDisk
 │   │   │   └── RootMarker.RejectsMalformedFiles
-│   │   └── sync_test.cpp                       29 TESTs (class SyncTest : LibraryTest; .put(relative, size, mtime), .add_music(use_marker), .music(), .paths(root))
-│   │       ├── basics                          FirstSyncAddsMediaOfTheCategoryKindsOnly, SecondSyncChangesNothing,
+│   │   ├── companions_test.cpp                 9 TESTs (class CompanionsTest): OneEntryById, ImagesNextToATrackButNotInOtherFolders,
+│   │   │                                       AVideosNfoSubtitlesAndTheShowsFilesTwoLevelsUp, FilesDirectlyInTheRoot, CaseInsensitiveRootsAndTheLimit, UnknownEntry,
+│   │   │                                       PrefixesFindAMoviesSidecarsInAFlatFolderOfHundreds, PrefixesNearestFolderFirstAndEachFileOnce, PrefixesMatchCommonSpellings
+│   │   ├── migration_test.cpp                  5 TESTs: FileMigration.{AV010LibraryKeepsItsEntriesAndGetsAddedTimes, VideoCategoriesGainInfoOnce,
+│   │   │                                       SavedExtensionMapGainsNfo, AUserMappingOfNfoIsKept, TheDefaultBooksCategoryGoesUnlessItIsInUseOrChanged}
+│   │   └── sync_test.cpp                       30 TESTs (class SyncTest : LibraryTest; .put(relative, size, mtime), .add_music(use_marker), .music(), .paths(root))
+│   │       ├── basics                          FirstSyncAddsMediaOfTheCategoryKindsOnly, AddedTimeIsSetOnceAndSurvivesChanges, SecondSyncChangesNothing,
 │   │       │                                   SizeOrMtimeChangesAreModificationsAndKeepTheId, DeletedFilesAreRemovedBelowTheGuard
 │   │       ├── guard                           MassRemovalIsHeldUntilConfirmed, MassRemovalThresholdIsASetting
 │   │       ├── drives                          MissingRootIsOfflineAndKeepsEverything, DifferentDriveAtTheOldPathIsNotScanned,
@@ -255,6 +366,8 @@ hoardor/
 │   │       └── playback + relocation           ResolveForPlayback, ManualRelocationWithMarker, ManualRelocationRefusesAnotherRootsFolder,
 │   │                                           ManualRelocationWithoutMarkerChecksASample, UnreadableSubfolderKeepsItsEntries
 │   └── master/
+│       ├── metadata_pass_test.cpp              8 TESTs (MetadataPassTest, real files): TwoDrivesSyncAndReadInParallel, OneDriveAtATimeWhenTheSettingSaysSo, ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
+│       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, EachMovieFindsItsPosterInAFlatFolder, CancelStopsThePassAndTheRestWaits
 │       └── sync_worker_test.cpp                8 TESTs (class SyncWorkerTest: a real DB file + .music(), .add_music_root(n), .set_settings(edit))
 │           └── SyncWorkerTest.*                RunsARequestedSyncInTheBackground, DuplicateRequestsAreIgnored,
 │                                               CancelStopsTheRunningSyncAndRemovesNothing, SyncOnStartupWhenEnabled, NoStartupSyncByDefault,
@@ -266,13 +379,19 @@ hoardor/
 │   ├── support/
 │   │   └── bench_tree.hpp                      ns hoardor::bench: fn file_count() (env HOARDOR_BENCH_FILES, default 50,000);
 │   │                                           fn library_tree() (Music/Artist N/Album M/Track K.flac, built once per process)
+│   ├── audio/
+│   │   └── query_benchmark.cpp                 catalog(): N synthetic tracks (10/album, 20 albums/artist, 40 genres) stored via audio::Library;
+│   │                                           BM_AlbumsFirstPageByName, BM_AlbumsMiddlePageByName, BM_AlbumsFirstPageNewestAdded, BM_AlbumsOfAGenre,
+│   │                                           BM_TracksOfAnAlbum, BM_TracksMiddlePageByTitle, BM_AlbumCount, BM_TrackCount, BM_PendingCountWhenNothingIsPending
 │   └── file/
 │       ├── scanner_benchmark.cpp               BM_Scan: full scan of the tree
 │       └── sync_benchmark.cpp                  struct Synced, fn fresh_library() (DB file + Library + one root, settle window 0);
 │                                               BM_FirstSync (all inserts), BM_IncrementalSync (nothing changed)
 │
 ├── playground/                                 manual experiments against real drives
-│   ├── CMakeLists.txt                          targets hoardor_scan, hoardor_sync
+│   ├── CMakeLists.txt                          targets hoardor_scan, hoardor_sync, hoardor_read
+│   ├── media/
+│   │   └── read_playground.cpp                 main: hoardor_read <folder>: reads every audio/video file's metadata; files/s, bytes read (Linux)
 │   └── file/
 │       ├── scan_playground.cpp                 main: hoardor_scan <folder>: progress, counts by kind, errors, time
 │       └── sync_playground.cpp                 main: hoardor_sync <db> <category> <folder>: adds the root once, syncs, prints the report
@@ -289,17 +408,22 @@ hoardor/
     ├── CHANGELOGS/
     │   ├── README.md                           versions index, versioning rules, how to cut a version, entry template
     │   ├── unreleased.md                       finished work not yet in a version (newest first)
+    │   ├── v0.1.0.md                           v0.1.0: File Sync v1 (frozen)
     │   └── baseline.md                         project state before the changelog existed
     └── application/
         ├── ARCHITECTURE.md                     system-wide decisions + decision log (loads every session via CLAUDE.md)
+        ├── DATABASE.md                         every SQLite table, column, index, migration; proposed schema changes
         ├── CODE_TREE.md                        this file (the source)
         ├── CODE_TREE.html                      the same tree as an offline page with search; GENERATED by tools/code_tree_html.py
         ├── engines/
         │   ├── file.md                         file engine reference: purpose, storage model, current state, roadmap
         │   ├── db.md                           db engine reference
-        │   └── master.md                       master engine reference (SyncWorker)
+        │   ├── audio.md                        audio engine reference (reading, tables, generic queries)
+        │   ├── video.md                        video engine reference (streams, .nfo, names, posters)
+        │   └── master.md                       master engine reference (SyncWorker, metadata pass)
         └── features/
-            └── file_sync.md                    File Sync v1 plan + as-built results, decisions, open items (OI-1)
+            ├── file_sync.md                    File Sync v1 plan + as-built results, decisions, open items (OI-1)
+            └── media_listing.md                Media library v1: metadata + generic queries (plan, as-built, results)
 ```
 
 ## Call flow of a Sync (how the pieces connect)

@@ -9,6 +9,7 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(hoardor_tests
+    core/text_test.cpp
     db/database_test.cpp
     file/file_time_test.cpp
     file/settings_test.cpp
@@ -16,10 +17,26 @@ add_executable(hoardor_tests
     file/scanner_test.cpp
     file/library_test.cpp
     file/sync_test.cpp
+    file/companions_test.cpp
+    file/migration_test.cpp
+    audio/read_test.cpp
+    audio/library_test.cpp
+    video/sources_test.cpp
+    video/read_test.cpp
+    video/library_test.cpp
     master/sync_worker_test.cpp
+    master/metadata_pass_test.cpp
 )
 
 target_link_libraries(hoardor_tests PRIVATE hoardor GTest::gtest_main)
+
+# The ffmpeg command-line tool makes small media files for the audio and video tests.
+# Optional: without it, those tests skip themselves.
+find_program(HOARDOR_FFMPEG_TOOL ffmpeg HINTS ${FFMPEG_ROOT}/bin)
+if(NOT HOARDOR_FFMPEG_TOOL)
+    set(HOARDOR_FFMPEG_TOOL "")
+endif()
+target_compile_definitions(hoardor_tests PRIVATE HOARDOR_FFMPEG_TOOL="${HOARDOR_FFMPEG_TOOL}")
 # Tests may include internal headers from src/ to test private helpers directly.
 target_include_directories(hoardor_tests PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR})
 

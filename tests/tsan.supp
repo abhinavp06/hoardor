@@ -1,0 +1,14 @@
+# ThreadSanitizer suppressions (CLAUDE.md, "Sanitizers"). Run with
+#   TSAN_OPTIONS=suppressions=tests/tsan.supp
+#
+# SQLite's WAL index ("-shm", shared memory) is read without locks by design: connections
+# coordinate through file locks (fcntl) and memory barriers, which ThreadSanitizer doesn't
+# see. Two connections writing in turn (one per drive worker) then look like a race inside
+# these functions. Only SQLite's own wal-index functions are listed, so races in hoardor's
+# code still show.
+race:walIndexWriteHdr
+race:walIndexTryHdr
+race:walIndexReadHdr
+race:walTryBeginRead
+race:walIndexAppend
+race:walCheckpoint

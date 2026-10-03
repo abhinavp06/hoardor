@@ -67,6 +67,22 @@ TEST_F(SyncTest, FirstSyncAddsMediaOfTheCategoryKindsOnly) {
     EXPECT_GT(after.last_sync_ns, 0);
 }
 
+TEST_F(SyncTest, AddedTimeIsSetOnceAndSurvivesChanges) {
+    put("a.mp3");
+    const Root root = add_music();
+    const std::int64_t before = now_ns();
+    ASSERT_EQ(library->sync_root(root.id).outcome, RootSyncOutcome::Synced);
+    const Entry first = all_entries(root.id).at(0);
+    EXPECT_GE(first.added_ns, before - 1'000'000'000);
+    EXPECT_LE(first.added_ns, now_ns());
+
+    put("a.mp3", 5);  // modified
+    ASSERT_EQ(library->sync_root(root.id).modified, 1u);
+    const Entry second = all_entries(root.id).at(0);
+    EXPECT_EQ(second.id, first.id);
+    EXPECT_EQ(second.added_ns, first.added_ns);
+}
+
 TEST_F(SyncTest, SecondSyncChangesNothing) {
     put("a.mp3");
     put("b.mp3");
@@ -283,7 +299,9 @@ TEST_F(SyncTest, ChangingTheCategoryAppliesItsKinds) {
     const Root root = add_music();
     library->sync_root(root.id);
     EXPECT_EQ(paths(root.id), (std::set<std::string>{"song.mp3"}));
-    ASSERT_TRUE(library->set_root_category(root.id, category("Books")));
+    const auto books = library->add_category("Books", {FileKind::Text});
+    ASSERT_TRUE(books.has_value());
+    ASSERT_TRUE(library->set_root_category(root.id, *books));
     library->sync_root(root.id);
     EXPECT_EQ(paths(root.id), (std::set<std::string>{"notes.txt"}));
 }

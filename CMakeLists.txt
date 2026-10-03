@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.23)
 
 project(
     hoardor
-    VERSION 0.1.0
+    VERSION 0.2.0
     LANGUAGES C CXX
 )
 
@@ -37,6 +37,9 @@ option(BUILD_BENCHMARKS "Build Google Benchmark targets (use a Release build)" O
 add_subdirectory(third_party)
 
 add_library(hoardor
+    # CORE (shared infrastructure, built on demand)
+    src/core/text.cpp
+
     # DB ENGINE
     src/db/database.cpp
 
@@ -48,6 +51,19 @@ add_library(hoardor
     src/file/library_sync.cpp
     src/file/root_marker.cpp
 
+    # MEDIA (internal: the ffmpeg layer and the query builder shared by audio and video)
+    src/media/ffmpeg.cpp
+    src/media/query.cpp
+
+    # AUDIO ENGINE
+    src/audio/read.cpp
+    src/audio/library.cpp
+
+    # VIDEO ENGINE
+    src/video/sources.cpp
+    src/video/read.cpp
+    src/video/library.cpp
+
     # MASTER ENGINE
     src/master/sync_worker.cpp
 )
@@ -55,14 +71,17 @@ add_library(hoardor
 # Platform backends (ARCHITECTURE §5): one implementation per OS, chosen here, never by #ifdef in shared code.
 if(WIN32)
     target_sources(hoardor PRIVATE
+        src/file/platform/device_windows.cpp
         src/file/platform/file_info_windows.cpp
         src/file/platform/mount_points_windows.cpp)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(hoardor PRIVATE
+        src/file/platform/device_linux.cpp
         src/file/platform/file_info_posix.cpp
         src/file/platform/mount_points_linux.cpp)
 else()
     target_sources(hoardor PRIVATE
+        src/file/platform/device_other.cpp
         src/file/platform/file_info_posix.cpp
         src/file/platform/mount_points_other.cpp)
 endif()
@@ -75,7 +94,7 @@ target_include_directories(hoardor
 )
 
 find_package(Threads REQUIRED)
-target_link_libraries(hoardor PRIVATE hoardor_sqlite3 PUBLIC Threads::Threads)
+target_link_libraries(hoardor PRIVATE hoardor_sqlite3 hoardor_pugixml hoardor_ffmpeg PUBLIC Threads::Threads)
 
 if(MSVC)
     target_compile_options(hoardor PRIVATE /W4 /permissive- /utf-8)

@@ -22,7 +22,7 @@ Do this at the start of every session, before proposing or changing anything. Ea
 2. **`DOCUMENTATION/CHANGELOGS/`** covers *where we are*. Read `unreleased.md` in full, and the newest `v*.md` file (find it in the index in `README.md`), so you know what was done last, the open follow-ups, and the known limitations. Search older version files when the history of a specific area matters.
 3. **`git status` and `git log --oneline -15`** show the current branch and any uncommitted work that the changelog doesn't capture yet.
 4. **`DOCUMENTATION/application/features/<feature>.md`** gives *what we're building right now*: the feature's goals, phases, API detail, edge cases, test plan, decisions, and open items. **`DOCUMENTATION/application/engines/<engine>.md`** gives *what each engine is*: its responsibilities, principles (e.g. the file engine's storage model), current API and tables, and roadmap. Read the feature doc for the task, and the doc of every engine it touches.
-5. **`DOCUMENTATION/application/CODE_TREE.md`** is one tree of the whole repository: every file, type, function, and test, with a line each. Use it to find code before opening files.
+5. **`DOCUMENTATION/application/CODE_TREE.md`** is one tree of the whole repository: every file, type, function, and test, with a line each. Use it to find code before opening files. When the task touches stored data, also read **`DOCUMENTATION/application/DATABASE.md`**: every table, column, index, and migration.
 6. **`include/hoardor/<engine>/`** is the public API contract for that engine. Read it before the implementation.
 7. **`src/<engine>/`** contains the implementation, including the platform backends in `src/<engine>/platform/`.
 8. **`tests/<engine>/`** shows what is already covered, so new tests extend it and don't duplicate it.
@@ -58,6 +58,7 @@ DOCUMENTATION/
   notes/                      # the user's PERSONAL notes. Read only when asked. Never edit
   application/
     ARCHITECTURE.md           # system-wide architecture and decision log
+    DATABASE.md               # every SQLite table, column, index, and migration (the schema's single reference)
     CODE_TREE.md              # one tree of the whole repo: files, types, functions, tests, targets (the source)
     CODE_TREE.html            # the same tree as an offline page with search; GENERATED, never edit by hand
     engines/<engine>.md       # long-lived reference per engine: responsibilities, principles, current API/tables, roadmap
@@ -65,6 +66,11 @@ DOCUMENTATION/
 ```
 
 ## Build and test
+
+hoardor needs ffmpeg's development files (metadata reading):
+- **Linux:** `apt install libavformat-dev libavcodec-dev libavutil-dev ffmpeg`. The `ffmpeg` command-line tool generates test media; tests that need it skip without it.
+- **macOS:** `brew install ffmpeg`.
+- **Windows:** a shared LGPL build (e.g. BtbN's `win64-lgpl-shared`), passed with `-DFFMPEG_ROOT=<folder with include/ lib/ bin/>`, its `bin` on `PATH`.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
@@ -80,6 +86,7 @@ cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON -DB
 cmake --build build-release -j && ./build-release/benchmarks/hoardor_benchmarks
 
 # Sanitizers (san = address or thread). On recent kernels ThreadSanitizer needs ASLR off: prefix with `setarch $(uname -m) -R`.
+# ThreadSanitizer also needs TSAN_OPTIONS=suppressions=tests/tsan.supp (SQLite's lock-free WAL index, see the file).
 cmake -S . -B build-$san -DCMAKE_BUILD_TYPE=Debug -DRUN_TESTS_AFTER_BUILD=OFF \
       -DCMAKE_CXX_FLAGS=-fsanitize=$san -DCMAKE_C_FLAGS=-fsanitize=$san -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=$san
 ```
@@ -113,6 +120,7 @@ Permission tests (unreadable or read-only folders) skip themselves when run as r
 - [ ] `DOCUMENTATION/application/features/<feature>.md` matches what was actually built, and its status is updated (e.g. Shipped in `v0.1.0`).
 - [ ] `DOCUMENTATION/application/engines/<engine>.md` "Current state" lists the real public API, tables, and settings.
 - [ ] `DOCUMENTATION/application/ARCHITECTURE.md` reflects any system-wide decision, including a new decision-log row.
+- [ ] `DOCUMENTATION/application/DATABASE.md` matches every table, column, index, and migration that was added or changed.
 - [ ] `DOCUMENTATION/application/CODE_TREE.md` lists every file, type, function, and test that was added, renamed, or removed, and `CODE_TREE.html` was regenerated (`python3 tools/code_tree_html.py`).
 
 ## Living documentation
@@ -130,5 +138,6 @@ These files are the project's memory. The user relies on them for context later,
   Be thorough. A future reader with no other context should understand the change. New work goes in `unreleased.md` until a version is cut. Never rewrite or delete past entries, and never edit a version file once it's cut. If something was wrong, add a correcting entry.
 - **`DOCUMENTATION/application/ARCHITECTURE.md`**: update it whenever a system-wide decision is made or changed, and add a dated row to its decision log.
 - **`DOCUMENTATION/application/features/<feature>.md`**: update it whenever the feature's design, API, schema, edge cases, or phases change. Implementation often reveals changes, so record them as they happen, so the doc never drifts from the code.
+- **`DOCUMENTATION/application/DATABASE.md`**: the user asked for one schema reference (2026-10-02). Feature docs propose schema changes (listed under its "Proposed" section); when they're built, update its tables, indexes, and migration history in the same change.
 - **`DOCUMENTATION/application/CODE_TREE.md` + `CODE_TREE.html`**: the user asked for both to stay current whenever we work on a feature. Update the Markdown in the same change whenever a file, type, function, test, or build target is added, renamed, or removed, then run `python3 tools/code_tree_html.py` to regenerate the HTML. Never edit the HTML by hand. It's a map, so a stale entry is worse than none.
 - **`DOCUMENTATION/application/engines/<engine>.md`**: update it when an engine's responsibilities, principles, or roadmap change, and refresh its "Current state" whenever a feature ships.

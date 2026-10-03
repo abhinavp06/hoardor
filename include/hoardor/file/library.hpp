@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <functional>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -75,6 +76,7 @@ struct Entry {
     FileKind kind{};
     bool unsettled = false;  // probably still being copied; metadata engines skip it
     std::int64_t changed_generation = 0;
+    std::int64_t added_ns = 0;  // when a sync first found it (entries from before v0.2.0: their mtime)
 };
 
 struct ScanErrorRecord {
@@ -169,6 +171,8 @@ public:
 
     // ---- Reads ----
 
+    // One entry by id (NotFound if it's gone). Reads SQLite only.
+    Result<Entry> entry(EntryId id);
     // Paged by id, ascending, so consumers never load everything.
     Result<std::vector<Entry>> entries(RootId root, EntryId after = 0, std::size_t limit = 500);
     // The entries added or changed by one sync (RootSyncReport::generation), paged by id.
@@ -176,6 +180,15 @@ public:
                                                std::size_t limit = 500);
     // What the last sync of this root couldn't read (up to `limit`).
     Result<std::vector<ScanErrorRecord>> scan_errors(RootId root, std::size_t limit = 500);
+    // The image, subtitle, and info (.nfo) entries in the same folder as `entry`, and, with
+    // parent_levels > 0, those directly in up to that many parent folders (a show's tvshow.nfo
+    // and poster). Reads SQLite only. Up to `limit` entries, nearest folder first.
+    // With `prefixes`, only the files whose name starts with one of them ("Arrival (2016).",
+    // "poster."): one index lookup per prefix instead of the whole folder, so a flat folder of
+    // a thousand movies and their sidecars never crowds out the ones that matter. A prefix
+    // matches as given and in lowercase, Capitalized, and UPPERCASE ("Poster.jpg").
+    Result<std::vector<Entry>> companions(EntryId entry, int parent_levels = 0, std::size_t limit = 200,
+                                          std::span<const std::string> prefixes = {});
     // For playback: the file's current absolute path, or RootOffline / FileMissing.
     // Touches the drive (resolves the root), so never call it just to display the library.
     Result<std::filesystem::path> resolve(EntryId entry);

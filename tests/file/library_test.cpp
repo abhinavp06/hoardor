@@ -18,21 +18,22 @@ using hoardor::test::LibraryTest;
 
 TEST_F(LibraryTest, SeedsDefaultCategories) {
     const auto categories = library->categories().value();
-    ASSERT_EQ(categories.size(), 4u);
+    ASSERT_EQ(categories.size(), 3u);  // Books went in migration 3
     EXPECT_EQ(categories[0].name, "Music");
     EXPECT_EQ(categories[0].kinds, (std::vector<FileKind>{FileKind::Audio, FileKind::Image}));
     EXPECT_EQ(categories[1].name, "Movies");
-    EXPECT_EQ(categories[1].kinds, (std::vector<FileKind>{FileKind::Video, FileKind::Subtitle, FileKind::Image}));
+    // Migration 2 adds .nfo descriptions to the video categories.
+    EXPECT_EQ(categories[1].kinds,
+              (std::vector<FileKind>{FileKind::Video, FileKind::Subtitle, FileKind::Image, FileKind::Info}));
     EXPECT_EQ(categories[2].name, "Shows");
-    EXPECT_EQ(categories[3].name, "Books");
-    EXPECT_EQ(categories[3].kinds, (std::vector<FileKind>{FileKind::Text, FileKind::Image}));
+    EXPECT_EQ(categories[2].kinds, categories[1].kinds);
 }
 
 TEST_F(LibraryTest, OpeningAgainKeepsData) {
     ASSERT_TRUE(library->add_category("Podcasts", {FileKind::Audio}));
     auto again = Library::open(*db);
     ASSERT_TRUE(again.has_value());
-    EXPECT_EQ(again->categories().value().size(), 5u);
+    EXPECT_EQ(again->categories().value().size(), 4u);  // Music, Movies, Shows, Podcasts
 }
 
 TEST_F(LibraryTest, SettingsDefaultWhenNothingStored) {
@@ -57,6 +58,7 @@ TEST_F(LibraryTest, SettingsRoundTripEveryField) {
     s.progress_interval_files = 10;
     s.relocation_sample_size = 5;
     s.relocation_min_match_percent = 60;
+    s.parallel_devices = 2;
     ASSERT_TRUE(library->save_settings(s));
     const Settings l = library->load_settings().value();
     EXPECT_EQ(l.extension_kinds, (std::unordered_map<std::string, FileKind>{{"mka", FileKind::Audio}, {"nfo", FileKind::Text}}));
@@ -70,6 +72,7 @@ TEST_F(LibraryTest, SettingsRoundTripEveryField) {
     EXPECT_EQ(l.progress_interval_files, 10);
     EXPECT_EQ(l.relocation_sample_size, 5);
     EXPECT_EQ(l.relocation_min_match_percent, 60);
+    EXPECT_EQ(l.parallel_devices, 2);
 }
 
 TEST_F(LibraryTest, CorruptSettingValuesFallBackToDefaults) {
@@ -110,7 +113,7 @@ TEST_F(LibraryTest, AddUpdateRemoveCategory) {
 TEST_F(LibraryTest, CategoryNamesAreUniqueIgnoringCaseAndNotEmpty) {
     EXPECT_EQ(library->add_category("music", {}).error().code, ErrorCode::AlreadyExists);
     EXPECT_EQ(library->add_category("   ", {}).error().code, ErrorCode::InvalidArgument);
-    EXPECT_EQ(library->update_category(Category{category("Books"), "MOVIES", {}}).error().code, ErrorCode::AlreadyExists);
+    EXPECT_EQ(library->update_category(Category{category("Shows"), "MOVIES", {}}).error().code, ErrorCode::AlreadyExists);
     EXPECT_EQ(library->update_category(Category{999, "X", {}}).error().code, ErrorCode::NotFound);
 }
 
@@ -220,10 +223,10 @@ TEST_F(LibraryTest, ReadOnlyFolderFallsBackToNoMarker) {
 TEST_F(LibraryTest, RootCategoryCanChangeButOnlyToAnExistingOne) {
     fs::create_directories(dir.path() / "a");
     auto root = library->add_root(category("Music"), dir.path() / "a");
-    ASSERT_TRUE(library->set_root_category(root->id, category("Books")));
-    EXPECT_EQ(library->root(root->id)->category_id, category("Books"));
+    ASSERT_TRUE(library->set_root_category(root->id, category("Shows")));
+    EXPECT_EQ(library->root(root->id)->category_id, category("Shows"));
     EXPECT_EQ(library->set_root_category(root->id, 999).error().code, ErrorCode::NotFound);
-    EXPECT_EQ(library->set_root_category(999, category("Books")).error().code, ErrorCode::NotFound);
+    EXPECT_EQ(library->set_root_category(999, category("Shows")).error().code, ErrorCode::NotFound);
 }
 
 TEST_F(LibraryTest, RemoveRootKeepsItsMarkerOnDisk) {

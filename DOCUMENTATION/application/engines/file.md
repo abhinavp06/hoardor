@@ -137,7 +137,7 @@ As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANN
 - `file_info_posix.cpp` and `file_info_windows.cpp`
 - `mount_points_linux.cpp`, `mount_points_windows.cpp`, and `mount_points_other.cpp` (empty for now)
 
-**Tables** (migration 1 of component `file`): `file_settings`, `file_categories` (seeded with Music, Movies, Shows, Books), `file_roots`, `file_entries`, and `file_scan_errors`. The full schema is in `features/file_sync.md` §4.3.
+**Tables** (migration 1 of component `file`): `file_settings`, `file_categories` (seeded with Music, Movies, Shows, Books; migration 3 removes an untouched Books again, 2026-10-03), `file_roots`, `file_entries`, and `file_scan_errors`. The full schema is in `features/file_sync.md` §4.3.
 
 **Settings** (`file::Settings`, persisted one row per field in `file_settings`):
 
@@ -153,6 +153,12 @@ As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANN
 | `progress_interval_files` | `500` |
 | `relocation_sample_size` / `relocation_min_match_percent` | `20` / `80` |
 
+**Media library v1, phase 1 (branch `abhinavp06/MEDIA_LISTING`):**
+- `Entry::added_ns`: set when a sync first inserts an entry (file migration 2).
+- `FileKind::Info` for `.nfo`.
+- `Library::companions(entry, parent_levels, limit, prefixes)`: with name prefixes, one index lookup per prefix (2026-10-03).
+- Schema details: `DATABASE.md`.
+
 ## 4. Roadmap
 
 | Phase | Scope | Delivered by |
@@ -163,7 +169,9 @@ As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANN
 | 4. Platform volume support | Volume IDs, drive-arrival triggers, per-volume concurrency, macOS | A future feature doc |
 | Deferred | Realtime watching | Not planned |
 
-### 4.0 Next feature: Media listing (approved proposals, not designed in detail yet)
+### 4.0 Next feature: Media listing → Media library v1 (`features/media_listing.md`)
+
+**Superseded on 2026-10-02 (the user):** listing by file and folder names was rejected in review. The branch now delivers metadata (new `audio` and `video` engines, ffmpeg) and generic query APIs. For the file engine that means `added_ns`, `FileKind::Info` (`.nfo`), and `companions(entry)`. The outline below is kept as history.
 
 The user approved these proposals on 2026-10-01. The detailed design goes in `features/media_listing.md` on a new branch, after File Sync v1 merges. TYLI's tabs list a category's media across all of its folders.
 
@@ -197,7 +205,7 @@ This replaces the plan of 2026-10-02 to put tag reading on `abhinavp06/FILE_SCAN
   - Windows: `GetVolumeInformationW`
   - macOS: DiskArbitration
 - **Volume arrival:** plugging in a drive triggers resolution and an optional sync of its roots. This is the first need for syncing a single root, and it may become a third `sync` overload then. hoardor exposes `check_roots()`. The trigger can come from hoardor's own platform listener, or from TYLI calling `check_roots()` when the OS reports a device change.
-- **Per-volume scan concurrency** (configurable): 1 for an HDD, more for an SSD, RAID, or NAS. Roots on different volumes scan in parallel.
+- **Per-device concurrency: built 2026-10-02** (on `abhinavp06/MEDIA_LISTING`, at the user's request). `file::device_of` names a path's physical drive, and `master` syncs and reads metadata with one worker per drive, up to `parallel_devices` (default 4). Still open: several workers per SSD/RAID/NAS, and a DiskArbitration backend on macOS.
 - **macOS** mount-point listing (`getmntinfo`).
 
 
