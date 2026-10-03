@@ -2,6 +2,50 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Posters for every movie and show: Plex's, else a frame (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** Most movies and shows still had no poster after the companion fix: the user's library is a Plex library, and Plex keeps its art in its own data folder, not next to the videos. The user chose: "Plex's posters, and a frame as the fallback". Plex runs on the same PC. Design: `features/posters.md`.
+
+**What changed:**
+- **`video::PlexPosters`:**
+  - It finds Plex's data folder (`%LOCALAPPDATA%`, macOS, and Linux locations) and opens its database **read-only**.
+  - One query copies each video file's poster into an indexed TEMP table, so Plex's file is read once and never written.
+  - `poster(video_file)` matches by the last folder and the file name, so another drive letter or a UNC share still matches. Several hits: the longest shared path tail decides, and a tie gives no poster.
+  - A movie gets its own poster; an episode gets its show's, else its season's.
+  - It resolves `metadata://`, `upload://`, and `media://`. When the chosen file is missing, it takes another poster in the same bundle. `http` posters are never fetched.
+- **`video::grab_frame`:**
+  - It decodes one frame at 15 %, then 30 % and 50 % if the frame is nearly black, scaled to at most 480 px high as RGB.
+  - Anamorphic video is widened to its shown shape.
+  - It's built on libswscale, part of the same ffmpeg build.
+- **`Group::first_entry`:** a group's first real episode (season, then episode; specials last), or any copy of a movie. It's packed into one `MIN()`.
+- **`db::Database::open_read_only`:** for another program's database.
+
+**Decisions:**
+- Posters aren't stored in hoardor's tables. The app asks when it makes thumbnails (TYLI's thumbnail pass), so there's no migration and no re-read of the library.
+- Plex's posters come before frames.
+- **Rejected:**
+  - better name matching alone: the folders have no images
+  - fetching art online: against the offline rule
+  - copying Plex's images into hoardor: the thumbnails already are the copy
+
+**Tests:** 228 pass (+15):
+- `VideoFrame` (6): scaling, never upscaled, a dark intro skipped, all dark, anamorphic, audio-only and missing files
+- `PlexPostersTest` (8): another drive letter and case, the show's then the season's poster, the bundle fallback, `media://`, `http` never fetched, duplicates, generic episode names, Plex's file unchanged byte for byte, no Plex or an unexpected database, `find_folder`
+- `VideoLibraryTest.AGroupsFirstEntryIsItsFirstRealEpisode`
+
+**Files:**
+- `include/hoardor/video/video.hpp`, `src/video/{frame,plex,library}.cpp`
+- `include/hoardor/db/database.hpp`, `src/db/database.cpp`
+- `CMakeLists.txt`, `third_party/CMakeLists.txt` (libswscale), `CLAUDE.md` (`libswscale-dev`)
+- `tests/CMakeLists.txt`, `tests/video/{frame_test,plex_test,library_test}.cpp`
+- `DOCUMENTATION/application/{features/posters.md (new), features/media_listing.md, engines/video.md, ARCHITECTURE.md, CODE_TREE.md, CODE_TREE.html}`
+
+**Known limitations and follow-ups:**
+- Plex's layout is verified against a fake, not the user's Plex yet: if posters don't show, TYLI's `plex_probe.ps1`.
+- A custom Plex data location (a registry value) isn't read.
+- A frame-grabbed poster stays after Plex gets a real one.
+- No per-episode frames yet.
+
 ### Player: an opt-in mpv log, and the grain measured (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** The user found video playback "a little grainy" and asked to verify it.

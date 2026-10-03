@@ -67,8 +67,8 @@ DOCUMENTATION/
 
 ## Build and test
 
-hoardor needs ffmpeg's development files (metadata reading) and libmpv's (playback):
-- **Linux:** `apt install libavformat-dev libavcodec-dev libavutil-dev ffmpeg libmpv-dev`. The `ffmpeg` command-line tool generates test media; tests that need it skip without it.
+hoardor needs ffmpeg's development files (metadata reading, frame grabs) and libmpv's (playback):
+- **Linux:** `apt install libavformat-dev libavcodec-dev libavutil-dev libswscale-dev ffmpeg libmpv-dev`. The `ffmpeg` command-line tool generates test media; tests that need it skip without it.
 - **macOS:** `brew install ffmpeg mpv`.
 - **Windows:**
   - **ffmpeg:** a shared LGPL build (e.g. BtbN's `win64-lgpl-shared`), passed with `-DFFMPEG_ROOT=<folder with include/ lib/ bin/>`, its `bin` on `PATH`.

@@ -58,12 +58,16 @@ hoardor/
 │   │       ├── fn read(path, companions) -> Result<VideoInfo>   streams + (.nfo > tags > names) + poster pick
 │   │       ├── fn companion_prefixes(path) -> vector<string>      "<name>.", "<name>-poster.", "poster.", … for file::Library::companions
 │   │       ├── fn embedded_poster(path) -> Result<bytes>         attached picture or a Matroska image attachment ("cover.*", else *cover*/*poster*)
+│   │       ├── struct Frame { width, height, rgb }  · default_frame_positions {0.15, 0.30, 0.50}   (features/posters.md)
+│   │       ├── fn grab_frame(path, at, max_height=480) -> Result<Frame>   a still for a poster; skips nearly black frames; widens anamorphic video
+│   │       ├── class PlexPosters               Plex's own posters, read-only: static find_folder() · static open(plex_folder) (one read into a
+│   │       │                                   TEMP table keyed by the last folder + file name) · poster(video_file) -> optional<path>
 │   │       ├── enum Field                      Type, Title, Year, Genre, Director, Show, Season, Episode, Duration, Height, Hdr, VideoCodec,
 │   │       │                                   Added, Category, Root, Entry, Search (full-text filter)
 │   │       ├── Value, Condition, Filter, Order, PendingEntry   (as in audio)
 │   │       ├── struct Item                     a stored movie/episode + poster_entry, has_embedded_poster, root_id, root_online, added_ns, size
 │   │       ├── struct Group                    { values[], items, duration_ms, added_first/last_ns, year_min/max, max_height, any_hdr,
-│   │       │                                     poster_entry, embedded_poster_entry, any_online }
+│   │       │                                     poster_entry, embedded_poster_entry, any_online, first_entry (first real episode / any copy) }
 │   │       ├── enum GroupOrder                 Values, AddedLast, Year, Items
 │   │       └── class Library                   open · pending · pending_count · store(…, poster_entry) · store_error · remove_unused_names
 │   │                                           · items · groups · count · group_count · item
@@ -85,6 +89,7 @@ hoardor/
 │   │       ├── class Database                  one connection; move-only; one thread at a time
 │   │       │   ├── static open(file, Options) -> Result<Database>          WAL, synchronous=NORMAL, foreign keys, busy_timeout
 │   │       │   ├── static open_in_memory(Options) -> Result<Database>      for tests (no WAL)
+│   │       │   ├── static open_read_only(file, Options) -> Result<Database>  another program's database (Plex's): never written, no WAL switch
 │   │       │   ├── .exec(sql) -> Result<void>  one or more statements, no rows
 │   │       │   ├── .prepare(sql) -> Result<Statement>
 │   │       │   ├── .last_insert_id() / .changes()
@@ -227,6 +232,8 @@ hoardor/
 │   │   │                                       <movie>, <episodedetails>, <tvshow>; Kodi URL tail cut) · from_name(file) (SxxEyy, NxNN,
 │   │   │                                       "Season N/NN - Title", "Title (Year)", "Title.Year.…") · season_of_folder(name) · clean_name(text)
 │   │   ├── read.cpp                            video::read, video::embedded_poster; (internal) hdr_of, cover_attachment, pick_poster
+│   │   ├── frame.cpp                           video::grab_frame (libavcodec + libswscale); (internal) decode_at, brightness, to_rgb
+│   │   ├── plex.cpp                            video::PlexPosters; (internal) key_of, normalized, State::bundle/image (metadata://, upload://, media://)
 │   │   └── library.cpp                         video::Library; (internal) schema_v1, schema(), item_columns/read_item, streams_text/streams_from
 │   │
 │   ├── db/
@@ -295,7 +302,7 @@ hoardor/
 │       ├── playback.cpp                        file_resolver
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 213 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 228 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -323,9 +330,16 @@ hoardor/
 │   │   ├── read_test.cpp                       10 TESTs (VideoRead): StreamsLanguagesAndTags, HdrIsRecognized, NfoBeatsTagsAndNames_PosterIsPicked,
 │   │   │                                       EpisodeFromNamesWithTheShowsNfoAndPoster, MovieFromNameOnly, EmbeddedPosterAttachment, PosterNamedLikeTheMovie,
 │   │   │                                       EmbeddedPosterUnderOtherNamesButNeverAFont, NotAVideo; VideoCompanionPrefixes.TheFilesOwnNameThenTheCommonNames
-│   │   └── library_test.cpp                    9 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
+│   │   ├── library_test.cpp                    10 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
 │   │                                           DirectorsGenresAndWriters, PostersComeFromCompanionImagesThatStillExist, PendingAndErrorsAndStreams,
-│   │                                           MigrationThreeReadsEveryVideoAgain, PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved
+│   │                                           MigrationThreeReadsEveryVideoAgain, PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved,
+│   │                                           AGroupsFirstEntryIsItsFirstRealEpisode
+│   │   ├── frame_test.cpp                      6 TESTs (VideoFrame): AScaledStillKeepsTheShape, NeverScaledUp, ADarkIntroIsSkipped,
+│   │   │                                       AllDarkStillGivesTheLastFrame, AnamorphicVideoIsWidened, AudioOnlyOrMissingFilesFail
+│   │   └── plex_test.cpp                       8 TESTs (PlexPostersTest, a fake Plex folder): AMoviesChosenPosterEvenUnderAnotherDriveLetter,
+│   │                                           AnEpisodeGetsItsShowsPosterElseItsSeasons, AMissingImageFallsBackToAnotherPosterOfTheSameItem,
+│   │                                           TheSameFolderAndNameTwiceNeedsTheExactPath, GenericEpisodeNamesAreToldApartByTheirShow,
+│   │                                           PlexsDatabaseIsNeverWritten, NoPlexOrAnUnexpectedDatabaseFailsToOpen, FindsPlexsFolderInLocalAppData
 │   ├── db/
 │   │   └── database_test.cpp                   12 TESTs
 │   │       ├── Database.*                      OpensInMemoryWithForeignKeysOn, OpensFileInWalMode, OpenFailsForImpossiblePath, ReportsSqlErrors

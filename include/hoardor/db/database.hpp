@@ -70,6 +70,9 @@ class Database {
 public:
     static Result<Database> open(const std::filesystem::path& file, Options options = {});
     static Result<Database> open_in_memory(Options options = {});
+    // Another program's database (e.g. Plex's): never written, never switched to WAL. TEMP
+    // tables still work (they live in SQLite's own temporary file).
+    static Result<Database> open_read_only(const std::filesystem::path& file, Options options = {});
 
     Database(Database&& other) noexcept;
     Database& operator=(Database&& other) noexcept;

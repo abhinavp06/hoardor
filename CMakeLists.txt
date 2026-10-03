@@ -63,6 +63,8 @@ add_library(hoardor
     src/video/sources.cpp
     src/video/read.cpp
     src/video/library.cpp
+    src/video/frame.cpp
+    src/video/plex.cpp
 
     # PLAYER ENGINE (libmpv)
     src/player/library.cpp

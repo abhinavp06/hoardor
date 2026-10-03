@@ -144,6 +144,29 @@ TEST_F(VideoLibraryTest, ShowsSeasonsAndEpisodes) {
     EXPECT_EQ(eps[2].episode, 3);
 }
 
+TEST_F(VideoLibraryTest, AGroupsFirstEntryIsItsFirstRealEpisode) {
+    // For a frame as the poster when nothing else has one (features/posters.md §4).
+    for (const char* f : {"Dark/Specials.mkv", "Dark/S2E1.mkv", "Dark/S1E2.mkv", "Dark/S1E1.mkv", "Heat 720p.mkv", "Heat 1080p.mkv"}) put(f);
+    sync("Shows");
+    store("Dark/Specials.mkv", episode("Dark", 0, 1, "Making of"));
+    store("Dark/S2E1.mkv", episode("Dark", 2, 1, "B"));
+    store("Dark/S1E2.mkv", episode("Dark", 1, 2, "A2"));
+    store("Dark/S1E1.mkv", episode("Dark", 1, 1, "A1"));
+    store("Heat 720p.mkv", movie("Heat", 1995, 720));
+    store("Heat 1080p.mkv", movie("Heat", 1995, 1080));
+
+    const Filter episodes{{{Field::Type, Value{std::int64_t{2}}}}};
+    const auto shows = videos->groups(std::vector<Field>{Field::Show}, episodes).value().items;
+    ASSERT_EQ(shows.size(), 1u);
+    EXPECT_EQ(shows[0].first_entry, ids.at("Dark/S1E1.mkv"));
+    EXPECT_EQ(shows[0].poster_entry, 0);  // nothing else: TYLI falls back to Plex, then a frame
+
+    const Filter movies{{{Field::Type, Value{std::int64_t{1}}}}};
+    const auto heat = videos->groups(std::vector<Field>{Field::Title, Field::Year}, movies).value().items;
+    ASSERT_EQ(heat.size(), 1u);
+    EXPECT_TRUE(heat[0].first_entry == ids.at("Heat 720p.mkv") || heat[0].first_entry == ids.at("Heat 1080p.mkv"));
+}
+
 TEST_F(VideoLibraryTest, DirectorsGenresAndWriters) {
     put("a.mkv");
     put("b.mkv");

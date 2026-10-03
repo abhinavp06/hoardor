@@ -116,6 +116,11 @@ Result<Database> Database::open(const std::filesystem::path& file, Options optio
     return open_uri(std::string(utf8.begin(), utf8.end()), SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, true, options);
 }
 
+Result<Database> Database::open_read_only(const std::filesystem::path& file, Options options) {
+    const std::u8string utf8 = file.u8string();
+    return open_uri(std::string(utf8.begin(), utf8.end()), SQLITE_OPEN_READONLY, false, options);
+}
+
 Result<Database> Database::open_in_memory(Options options) {
     return open_uri(":memory:", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, false, options);
 }

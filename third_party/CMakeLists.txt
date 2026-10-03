@@ -36,13 +36,13 @@ set_target_properties(hoardor_pugixml PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # ffmpeg (LGPL, shared libraries): reads tags and stream information (features/media_listing.md).
 # Linux and macOS: the system's development packages, found with pkg-config
-#   (Ubuntu: libavformat-dev libavcodec-dev libavutil-dev; macOS: brew install ffmpeg).
+#   (Ubuntu: libavformat-dev libavcodec-dev libavutil-dev libswscale-dev; macOS: brew install ffmpeg).
 # Windows: a shared build (e.g. BtbN's "lgpl-shared"), pointed to with -DFFMPEG_ROOT=<folder with include/ lib/ bin/>.
 set(FFMPEG_ROOT "" CACHE PATH "ffmpeg folder with include/, lib/ and bin/ (Windows)")
 add_library(hoardor_ffmpeg INTERFACE)
 if(FFMPEG_ROOT)
     find_path(FFMPEG_INCLUDE_DIR libavformat/avformat.h HINTS ${FFMPEG_ROOT}/include REQUIRED)
-    foreach(lib avformat avcodec avutil)
+    foreach(lib avformat avcodec avutil swscale)
         find_library(FFMPEG_${lib}_LIBRARY ${lib} HINTS ${FFMPEG_ROOT}/lib REQUIRED)
         target_link_libraries(hoardor_ffmpeg INTERFACE ${FFMPEG_${lib}_LIBRARY})
     endforeach()
@@ -50,7 +50,7 @@ if(FFMPEG_ROOT)
     target_include_directories(hoardor_ffmpeg SYSTEM INTERFACE ${FFMPEG_INCLUDE_DIR})
 else()
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat>=60 libavcodec>=60 libavutil>=58)
+    pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat>=60 libavcodec>=60 libavutil>=58 libswscale>=7)
     target_link_libraries(hoardor_ffmpeg INTERFACE PkgConfig::FFMPEG)
 endif()
 

@@ -207,8 +207,13 @@ Item read_item(const db::Statement& st) {
 constexpr std::string_view group_aggregates =
     "COUNT(*), SUM(t.duration_ms), MIN(e.added_ns), MAX(e.added_ns), COALESCE(MIN(NULLIF(t.year, 0)), 0), MAX(t.year), "
     "MAX(t.height), MAX(t.hdr <> ''), COALESCE(MIN(p.id), 0), "
-    "COALESCE(MIN(CASE WHEN t.embedded_poster THEN t.entry_id END), 0), MAX(r.status = 1)";
-constexpr std::size_t group_aggregate_count = 11;
+    "COALESCE(MIN(CASE WHEN t.embedded_poster THEN t.entry_id END), 0), MAX(r.status = 1), "
+    // The first episode (season, then episode; specials and unknown seasons last; any copy of a
+    // movie), packed into one number so MIN() can pick it: entry ids stay below 2^32, episodes
+    // below 100,000, and seasons below 20,000 (year-numbered seasons are about 2,000).
+    "MIN(((CASE WHEN t.season > 0 THEN MIN(t.season, 19999) ELSE 20000 END) * 100000 + MIN(MAX(t.episode, 0), 99999)) "
+    "* 4294967296 + t.entry_id) % 4294967296";
+constexpr std::size_t group_aggregate_count = 12;
 
 std::string_view order_sql(GroupOrder order) {
     switch (order) {
@@ -423,6 +428,7 @@ Result<core::Page<Group>> Library::groups(std::span<const Field> by, const Filte
         g.poster_entry = st->column_int64(n + 8);
         g.embedded_poster_entry = st->column_int64(n + 9);
         g.any_online = st->column_int64(n + 10) != 0;
+        g.first_entry = st->column_int64(n + 11);
         page.items.push_back(std::move(g));
         if (page.items.size() == limit) page.next = media::cursor_from(*st, *built, 0);
     }
