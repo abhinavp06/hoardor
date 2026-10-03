@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **hoardor phases 1–4 built** (2026-10-02, 177 tests); TYLI (phase 5) in progress. Design approved 2026-10-02 (draft v2, after the user's review of draft v1, the file-name listing, which was rejected) |
+| Status | **Shipped in `v0.2.0`** (2026-10-03, 192 tests), with TYLI `v0.2.0`; tested by the user on Windows with their library. Open: posters for most movies and shows, the album count vs Plex (deferred by the user). Design approved 2026-10-02 (draft v2, after the user's review of draft v1, the file-name listing, which was rejected) |
 | Branch | `abhinavp06/MEDIA_LISTING` (one PR; pairs with TYLI's branch of the same name) |
 | Ships in | `v0.2.0` |
 | Engines involved | `core` (first component: the paging types), `file` (date added, companions, `.nfo` kind), **`audio`** (new: track metadata + queries), **`video`** (new: movie/episode metadata + queries), `master` (reads metadata after each sync), `db` (nothing new) |
