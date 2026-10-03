@@ -178,8 +178,12 @@ hoardor/
 │   │   └── player.hpp                          ns hoardor::player: playback on libmpv, the queue, per-entry state (engines/player.md)
 │   │       ├── struct Settings                 read ahead, hwdec, languages, subtitles, resume / viewed / play-count rules, volume; ::defaults()
 │   │       ├── struct ItemState                { entry, position_ms, duration_ms, viewed, play_count, last_played_ns, liked_ns } .liked()
-│   │       ├── class Library                   player_items + player_settings on one connection
-│   │       │   └── open · state · states(entries) · set_liked · save_position · count_play · load_settings · save_settings
+│   │       ├── struct Playlist / PlaylistItem / Added / Liked   a playlist (name, pinned, tracks, duration) · one row · what an add did · a like
+│   │       ├── class Library                   player_items + player_settings + playlists on one connection
+│   │       │   ├── open · state · states(entries) · set_liked · save_position · count_play · load_settings · save_settings
+│   │       │   ├── playlists · playlist · create_playlist · rename_playlist · delete_playlist · set_pinned · move_playlist
+│   │       │   ├── add_to_playlist · remove_from_playlist · move_in_playlist · playlist_items (paged) · playlist_entries · playlists_with
+│   │       │   └── liked (paged, newest first) · liked_count · liked_entries   (tracks only)
 │   │       ├── enum State / struct Track / struct Status   Idle|Loading|Playing|Paused · audio/subtitle tracks (+ forced) · what's loaded, position, volume, tracks
 │   │       ├── using Resolver / struct Callbacks / struct Outputs   entry -> path (player thread) · status, position, queue, error · audio/video "auto"/"null", log_file
 │   │       ├── class VideoRenderer             mpv's OpenGL render API: create(get_proc_address) · render(fbo, w, h, flip) · destroy · set_update_callback
@@ -294,7 +298,8 @@ hoardor/
 │   │       └── mount_points_other.cpp          returns {} (macOS until file engine phase 4)
 │   │
 │   ├── player/
-│   │   ├── library.cpp                         player::Library; (internal) schema_v1, item_columns/read_item, int/bool/text setting tables
+│   │   ├── library.cpp                         player::Library; (internal) schema_v1–v3, item_columns/read_item, int/bool/text setting tables
+│   │   ├── playlists.cpp                       player::Library's playlists and liked songs; (internal) name_key, checked_name, renumber, ids_of, move_to
 │   │   └── player.cpp                          VideoRenderer; Player::Impl (mpv handle, task queue, run loop: events, polls time-pos,
 │   │                                           start_item / prepare_next (mpv holds current + next) / begin_item / save_current / go_idle)
 │   │
@@ -302,7 +307,7 @@ hoardor/
 │       ├── playback.cpp                        file_resolver
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 233 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 240 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -404,6 +409,9 @@ hoardor/
 │   │   ├── library_test.cpp                    7 TESTs (PlayerLibraryTest): StatesAreZerosUntilPlayedOrLikedInTheAskedOrder, LikeUnlikeLikeAgain,
 │   │   │                                       ViewedOnlyEverTurnsOn, PlaysAreCounted, SettingsRoundTripWithLimitsAndBadValues, ARowGoesWithItsEntry,
 │   │   │                                       MigrationTwoTurnsSubtitlesOnUnlessChosenSince
+│   │   ├── playlist_test.cpp                   7 TESTs (PlaylistTest): CreateRenameDeleteWithNamesThatMustBeUnique, NewOnTopPinnedFirstAndTheUsersOrder,
+│   │   │                                       AddInOrderSkippingWhatsThereAndRefusingNonTracks, RemoveAndMoveRows, PagesInOrder,
+│   │   │                                       AFileLeavingTheLibraryLeavesItsPlaylists, LikedSongsAreTracksOnlyNewestFirst
 │   │   └── player_test.cpp                     16 TESTs (PlayerTest, real libmpv headless + generated files): PlaysTheQueueInOrderAndCountsEachPlay, MpvWritesItsLogWhenAsked,
 │   │                                           PromptActionsAddAndClearAndPlay, AnOfflineFileIsReportedOnceAndSkipped, NothingPlayableStopsInsteadOfLooping,
 │   │                                           ACorruptFileIsSkipped, PauseSeekPreviousAndNext, VideoResumesUntilViewed, MusicStartsAtTheBeginningByDefault,

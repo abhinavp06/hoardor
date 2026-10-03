@@ -33,7 +33,29 @@ constexpr std::string_view schema_v2 = R"sql(
 DELETE FROM player_settings WHERE key = 'subtitles_on' AND value = '0';
 )sql";
 
-constexpr std::array<db::Migration, 2> migrations{{{1, schema_v1}, {2, schema_v2}}};
+// Playlists and their rows (features/playlists.md §3): music only, the user's order, pinned first.
+constexpr std::string_view schema_v3 = R"sql(
+CREATE TABLE player_playlists (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    name_key TEXT NOT NULL UNIQUE,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    sort INTEGER NOT NULL,
+    created_ns INTEGER NOT NULL,
+    updated_ns INTEGER NOT NULL
+);
+CREATE TABLE player_playlist_items (
+    id INTEGER PRIMARY KEY,
+    playlist_id INTEGER NOT NULL REFERENCES player_playlists(id) ON DELETE CASCADE,
+    entry_id INTEGER NOT NULL REFERENCES file_entries(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    added_ns INTEGER NOT NULL
+);
+CREATE INDEX player_playlist_items_order ON player_playlist_items (playlist_id, position);
+CREATE INDEX player_playlist_items_entry ON player_playlist_items (entry_id);
+)sql";
+
+constexpr std::array<db::Migration, 3> migrations{{{1, schema_v1}, {2, schema_v2}, {3, schema_v3}}};
 
 Error database_error(const db::Error& error) { return Error{error.message}; }
 

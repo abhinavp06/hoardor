@@ -68,6 +68,7 @@ add_library(hoardor
 
     # PLAYER ENGINE (libmpv)
     src/player/library.cpp
+    src/player/playlists.cpp
     src/player/player.cpp
 
     # MASTER ENGINE

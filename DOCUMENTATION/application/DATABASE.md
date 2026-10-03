@@ -5,7 +5,7 @@ The one place that describes **every table in hoardor's SQLite database**: what 
 - **Mechanics** (connections, pragmas, statements, transactions, the migration runner) are in `engines/db.md`.
 - **Why one database, and who owns which tables:** `ARCHITECTURE.md` §3.
 
-Status: `v0.2.0` (Media library v1): file migrations 1–3, audio migrations 1–2, video migrations 1–3; plus audio migration 3 and player migrations 1–2 on `abhinavp06/PLAYER`.
+Status: `v0.2.0` (Media library v1): file migrations 1–3, audio migrations 1–2, video migrations 1–3; plus audio migration 3 and player migrations 1–2 in `v0.3.0`; player migration 3 (playlists) on `abhinavp06/PLAYLISTS`.
 
 ## 1. Rules
 
@@ -48,6 +48,8 @@ erDiagram
     video_items ||--o{ video_item_names : "entry_id (cascade)"
     video_names ||--o{ video_item_names : "name_id"
     file_entries ||--o| player_items : "entry_id (cascade)"
+    player_playlists ||--o{ player_playlist_items : "playlist_id (cascade)"
+    file_entries ||--o{ player_playlist_items : "entry_id (cascade)"
     file_settings
     player_settings
     db_migrations
@@ -69,6 +71,8 @@ erDiagram
 | `video_item_names` | `video` | a few per item | an item's genres, directors, writers (with a role) |
 | `player_items` | `player` | one per file played or liked | the user's state per file: position, viewed, play count, last played, liked |
 | `player_settings` | `player` | one per setting | the user's values for `player::Settings` |
+| `player_playlists` | `player` | one per playlist | name (unique, ignoring ASCII case), pinned, the user's order |
+| `player_playlist_items` | `player` | one per row of a playlist | a track (entry) at a position |
 
 ## 3. Tables
 
@@ -267,6 +271,20 @@ Indexes: `player_items_recent (last_played_ns)` for "continue watching" and "rec
 
 `key` TEXT PK, `value` TEXT: one row per `player::Settings` field (`features/player.md` §7). A value that doesn't parse or is out of range falls back to the code default.
 
+### `player_playlists`
+
+`id` PK · `name` TEXT · `name_key` TEXT UNIQUE (the trimmed name, ASCII case folded: `core::sort_key` without articles) · `pinned` 0/1 · `sort` (the user's order within its group; a new one gets `MIN - 1`, the top) · `created_ns` · `updated_ns` (last add, remove, move, or rename).
+
+Read as `playlists()`: pinned first, then `sort`, with each one's track count and total length from a `LEFT JOIN` on its rows and `audio_tracks` (read-only; the audio engine owns that table). `features/playlists.md`.
+
+### `player_playlist_items`
+
+`id` PK (one row) · `playlist_id` → `player_playlists` (cascade) · `entry_id` → `file_entries` (cascade: a file that leaves the library leaves its playlists; an offline drive removes nothing) · `position` (order; gaps are fine) · `added_ns`.
+
+- **`player_playlist_items_order (playlist_id, position)`:** a playlist's pages (keyset on position, id) and appends (`MAX(position)`). It's not `UNIQUE`, because a renumbering would trip it row by row.
+- **`player_playlist_items_entry (entry_id)`:** "which playlists hold this track" and the cascade.
+- **Liked Songs** is no table: `player_items` with `liked_ns > 0`, joined to `audio_tracks` (tracks only), newest first through `player_items_liked`.
+
 ## 4. Migration history
 
 | Component | Version | Shipped in | Change |
@@ -280,6 +298,7 @@ Indexes: `player_items_recent (last_played_ns)` for "continue watching" and "rec
 | `file` | 3 | `v0.2.0` | Deletes the seeded Books category if it's untouched: name `Books`, kinds `text,image`, and no roots. One with folders or changed kinds stays (2026-10-03) |
 | `audio` | 3 | (v0.3.0) | `UPDATE audio_tracks SET source_size = -1 WHERE read_error = 'not a playable audio file'`: retries, once, what was rejected for an unknown length (a FLAC whose STREAMINFO says 0 samples), which reading accepts since 2026-10-03 |
 | `player` | 1 | (v0.3.0, Player) | `player_items` (with `player_items_recent` and the partial `player_items_liked`) and `player_settings` |
+| `player` | 3 | (v0.4.0, Playlists) | `player_playlists` and `player_playlist_items` with `player_playlist_items_order` and `player_playlist_items_entry` |
 | `player` | 2 | (v0.3.0, 2026-10-03) | Deletes a stored `subtitles_on = 0`: subtitles became on by default, and the player had saved the old default with every volume change (no data lost: no one could have chosen it in TYLI yet) |
 | `video` | 3 | `v0.2.0` | `UPDATE video_items SET source_size = -1`: every video is read once more, because companions used to stop at the first 200 files of a folder and most movies in a big shared folder lost their poster and `.nfo` (2026-10-03). The rows stay listed until re-read |
 

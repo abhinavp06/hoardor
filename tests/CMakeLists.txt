@@ -27,6 +27,7 @@ add_executable(hoardor_tests
     video/frame_test.cpp
     video/plex_test.cpp
     player/library_test.cpp
+    player/playlist_test.cpp
     player/player_test.cpp
     master/sync_worker_test.cpp
     master/metadata_pass_test.cpp

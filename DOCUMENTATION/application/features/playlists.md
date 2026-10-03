@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Approved** (2026-10-03, "okay with almost everything", with changes: §1a), with TYLI `features/playlists_ui.md` and the mockups `playlist.html`, `liked.html` |
+| Status | **Engine built** (2026-10-03, player migration 3, 7 tests); the UI follows (TYLI `features/playlists_ui.md`). Approved 2026-10-03 ("okay with almost everything", with changes: §1a) |
 | Branch | `abhinavp06/PLAYLISTS` (both repos; started from `abhinavp06/PLAYER` while the `v0.3.0` PRs are open) |
 | Engine | `player` (it already keeps per-file likes; playlists are the user's other say in what plays) |
 
@@ -26,7 +26,7 @@ The user's choices (2026-10-03):
 - **Only tracks:** an entry is accepted only if the audio engine has read it as a track (`audio_tracks`, read-only join; like the video engine joining the file engine's tables).
 - **No duplicates by default:** adding a track that's already in the playlist skips it, and says how many were skipped. A later option can allow them.
 - **Order is a position number:** gaps are fine (a removed file's row goes with it). A move renumbers the playlist in one statement.
-- **Names are unique,** ignoring case ("Road Trip" and "road trip" are one name), and never empty.
+- **Names are unique,** ignoring ASCII case ("Road Trip" and "road trip" are one name; accents aren't folded), trimmed, and never empty.
 - **A file removed from the library leaves its playlists** (`ON DELETE CASCADE` from `file_entries`). An offline drive removes nothing (the file engine's offline rule), so its tracks stay, dimmed and skipped when played.
 
 ## 3. Schema (player migration 3)
@@ -35,7 +35,7 @@ The user's choices (2026-10-03):
 CREATE TABLE player_playlists (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
-    name_key TEXT NOT NULL UNIQUE,        -- the name folded for comparison (case, accents)
+    name_key TEXT NOT NULL UNIQUE,        -- the trimmed name, ASCII case folded (core::sort_key without articles)
     pinned INTEGER NOT NULL DEFAULT 0,    -- 1: in the pinned group, shown first
     sort INTEGER NOT NULL,                -- the user's order within its group (pinned or not)
     created_ns INTEGER NOT NULL,

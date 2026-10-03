@@ -4,6 +4,7 @@
 // entry ids, and stores what the user did with each file (position, viewed, play count,
 // liked). No Qt: the app draws the video frames through VideoRenderer.
 
+#include <hoardor/core/page.hpp>
 #include <hoardor/db/database.hpp>
 
 #include <cstddef>
@@ -72,8 +73,41 @@ struct ItemState {
 
 // The player's tables on one connection (one thread at a time, like every repository).
 // The Player writes through its own; the app reads states and sets likes through another.
+// ---------------------------------------------------------------- Playlists and liked songs
+// (features/playlists.md): music only; a playlist holds files (entry ids) in the user's order.
+
+using PlaylistId = std::int64_t;
+using PlaylistItemId = std::int64_t;
+
+struct Playlist {
+    PlaylistId id = 0;
+    std::string name;
+    bool pinned = false;
+    std::int64_t created_ns = 0, updated_ns = 0;
+    std::uint64_t tracks = 0;
+    std::int64_t duration_ms = 0;  // the tracks' lengths, as read (0 for unknown ones)
+};
+
+// One row of a playlist (the same file twice would be two rows).
+struct PlaylistItem {
+    PlaylistItemId id = 0;
+    EntryId entry = 0;
+    std::int64_t position = 0, added_ns = 0;
+};
+
+// What add_to_playlist did: added, already there (skipped), or not a track (refused).
+struct Added {
+    std::uint64_t added = 0, skipped = 0, not_tracks = 0;
+};
+
+struct Liked {
+    EntryId entry = 0;
+    std::int64_t liked_ns = 0;
+};
+
 class Library {
 public:
+    // Needs the audio engine's tables too (playlists hold tracks): open audio::Library first.
     static Result<Library> open(db::Database& database);
 
     Result<ItemState> state(EntryId entry);
@@ -89,6 +123,35 @@ public:
     // Settings::defaults() overlaid with every stored value that parses and is in range.
     Result<Settings> load_settings();
     Result<void> save_settings(const Settings& settings);
+
+    // Playlists in the user's order: pinned first, each group in its own order.
+    Result<std::vector<Playlist>> playlists();
+    Result<Playlist> playlist(PlaylistId id);
+    // A name is trimmed, never empty, and unique ignoring ASCII case. A new playlist starts at the
+    // top of the unpinned ones.
+    Result<PlaylistId> create_playlist(std::string_view name, std::int64_t now_ns);
+    Result<void> rename_playlist(PlaylistId id, std::string_view name, std::int64_t now_ns);
+    Result<void> delete_playlist(PlaylistId id);
+    // Pinning moves it to the top of the pinned group; unpinning to the top of the rest.
+    Result<void> set_pinned(PlaylistId id, bool pinned);
+    // Moves it to `index` within its group (past the end: the end).
+    Result<void> move_playlist(PlaylistId id, std::size_t index);
+
+    // Appends in order: tracks already in it are skipped, entries that aren't tracks refused.
+    Result<Added> add_to_playlist(PlaylistId id, std::span<const EntryId> entries, std::int64_t now_ns);
+    Result<void> remove_from_playlist(PlaylistId id, std::span<const PlaylistItemId> items, std::int64_t now_ns);
+    // Moves one row to `index` in the current order (past the end: the end).
+    Result<void> move_in_playlist(PlaylistId id, PlaylistItemId item, std::size_t index, std::int64_t now_ns);
+    Result<core::Page<PlaylistItem>> playlist_items(PlaylistId id, const std::optional<core::Cursor>& after = std::nullopt,
+                                                    std::size_t limit = 200);
+    Result<std::vector<EntryId>> playlist_entries(PlaylistId id);
+    // Which playlists hold this file (the add menu's checks).
+    Result<std::vector<PlaylistId>> playlists_with(EntryId entry);
+
+    // Liked songs: tracks only (a liked movie isn't a song), the newest like first.
+    Result<core::Page<Liked>> liked(const std::optional<core::Cursor>& after = std::nullopt, std::size_t limit = 200);
+    Result<std::uint64_t> liked_count();
+    Result<std::vector<EntryId>> liked_entries();
 
 private:
     explicit Library(db::Database& database) : db_(&database) {}

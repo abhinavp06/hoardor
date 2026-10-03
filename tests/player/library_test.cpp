@@ -104,7 +104,9 @@ TEST_F(PlayerLibraryTest, MigrationTwoTurnsSubtitlesOnUnlessChosenSince) {
     old.subtitles_on = false;
     old.volume = 70;
     ASSERT_TRUE(items->save_settings(old));
-    ASSERT_TRUE(db->exec("UPDATE db_migrations SET version = 1 WHERE component = 'player'"));
+    // (Migration 3's playlist tables came later: a version-1 database doesn't have them.)
+    ASSERT_TRUE(db->exec("DROP TABLE player_playlist_items; DROP TABLE player_playlists;"
+                         "UPDATE db_migrations SET version = 1 WHERE component = 'player'"));
     ASSERT_TRUE(player::Library::open(*db).has_value());
     const auto now = items->load_settings().value();
     EXPECT_TRUE(now.subtitles_on);
