@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Approved by the user** (2026-10-03: "looks good", plus the like heart, §1); building phase 1 |
+| Status | **Phases 1–4 built** (2026-10-03, §10a); phase 5 (the Windows test, OI-1) waits for the user. Approved 2026-10-03 ("looks good", plus the like heart, §1) |
 | Branch | `abhinavp06/PLAYER` (one PR; pairs with TYLI's branch of the same name) |
 | Ships in | `v0.3.0` |
 | Engines involved | **`player`** (new: playback through libmpv, the queue, progress and viewed state), `file` (`resolve(entry)`, already there), `master` (nothing in the first draft; yielding a sync to playback is OI-1, later), `db` (nothing new) |
@@ -275,6 +275,7 @@ CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 - **Each new item starts unpaused.** mpv keeps its pause state across files.
 - **Not built yet:** a test for exactly two files in mpv's playlist. The order and remove tests go through the append path.
 - **Tests:** 18 (`PlayerLibraryTest` 6, `PlayerTest` 12), 210 in all.
+- **Phase 3 (video frames):** TYLI's `VideoView` draws through `VideoRenderer` on the VNC display (Qt 6.12 on OpenGL, Mesa llvmpipe). mpv waits up to 0.2 s for each undrawn frame (vo_libmpv), so TYLI keeps the picture drawn under its other pages while a video is loaded.
 
 ## 11. Not in this feature
 

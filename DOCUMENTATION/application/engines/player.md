@@ -1,6 +1,6 @@
 # Player engine (`hoardor::player`)
 
-Status: **Phases 1–2 built** (2026-10-03, `features/player.md`): playback, the queue, per-entry state. Video frames (phase 3) are wired in, waiting for TYLI's item. Tests in `tests/player/`.
+Status: **Phases 1–3 built** (2026-10-03, `features/player.md`): playback, the queue, per-entry state, and video frames, drawn by TYLI's `VideoView` (checked on the VNC display). Waiting for the user's Windows test (phase 5). Tests in `tests/player/`.
 
 ## 1. Responsibilities
 

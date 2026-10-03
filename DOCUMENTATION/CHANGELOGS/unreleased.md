@@ -2,6 +2,14 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Player phase 3: video frames drawn by TYLI (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** No engine code changed. TYLI's `VideoView` now draws mpv's frames through `player::VideoRenderer` (TYLI's changelog).
+- **Checked on the VNC display:** OpenGL through Mesa llvmpipe, Qt 6.12, libmpv 0.37.
+- **Noted for apps (`features/player.md` §10a):** mpv waits up to 0.2 s for every frame nobody draws.
+
+**Files:** `DOCUMENTATION/application/{engines/player.md, features/player.md}`
+
 ### Player engine, phases 1–2: playback on libmpv, the queue, per-entry state (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** The new engine `hoardor::player` (`features/player.md`, `engines/player.md`), built and tested headless.
