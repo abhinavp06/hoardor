@@ -67,10 +67,12 @@ DOCUMENTATION/
 
 ## Build and test
 
-hoardor needs ffmpeg's development files (metadata reading):
-- **Linux:** `apt install libavformat-dev libavcodec-dev libavutil-dev ffmpeg`. The `ffmpeg` command-line tool generates test media; tests that need it skip without it.
-- **macOS:** `brew install ffmpeg`.
-- **Windows:** a shared LGPL build (e.g. BtbN's `win64-lgpl-shared`), passed with `-DFFMPEG_ROOT=<folder with include/ lib/ bin/>`, its `bin` on `PATH`.
+hoardor needs ffmpeg's development files (metadata reading) and libmpv's (playback):
+- **Linux:** `apt install libavformat-dev libavcodec-dev libavutil-dev ffmpeg libmpv-dev`. The `ffmpeg` command-line tool generates test media; tests that need it skip without it.
+- **macOS:** `brew install ffmpeg mpv`.
+- **Windows:**
+  - **ffmpeg:** a shared LGPL build (e.g. BtbN's `win64-lgpl-shared`), passed with `-DFFMPEG_ROOT=<folder with include/ lib/ bin/>`, its `bin` on `PATH`.
+  - **libmpv:** a "dev" build (e.g. shinchiro's `mpv-dev-x86_64-*.7z`) with an MSVC `mpv.lib` made from the DLL's exports (`dumpbin /exports` → `.def` → `lib /def`; TYLI's workflow shows how), passed with `-DMPV_ROOT=<folder with include/ lib/ bin/>`.
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug

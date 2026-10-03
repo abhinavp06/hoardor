@@ -262,6 +262,20 @@ CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 - **OI-P2:** does forcing OpenGL in Qt Quick on Windows cost anything elsewhere (startup, fonts, the software fallback on machines without a GPU driver)? Check in the Windows build.
 - **OI-P3:** libmpv's Windows package and its import library in MSVC: confirm in phase 1 in the workflow.
 
+## 10a. As built (phases 1–2, 2026-10-03)
+
+- **`Library` and `Player` are separate.**
+  - **`player::Library`** is the repository on any connection: `state`, `states`, `set_liked`, `save_position`, `count_play`, and the settings. TYLI reads states and sets likes through its own connection.
+  - **`Player`** writes progress through the connection it opens for its thread.
+  - The sketch in §4.2 had `set_liked` / `state` on `Player`. Liking shouldn't need playback.
+- **The resolver** is `master::file_resolver(database_file)`. It opens its own `file::Library` connection on first use, which happens on the player's thread, and words the errors for the UI.
+- **mpv's commands** are synchronous on the player thread: they keep their order and only queue work inside mpv. Callers never wait, because every public command is posted to that thread (`mpv_wakeup`).
+- **The position is also polled every 0.5 s.** mpv sends few `time-pos` updates for audio-only files, so a 0.6 s track ended before its 50% mark was ever seen. Reaching the end also counts a play.
+- **Resume:** any saved position not yet viewed. The "not in the last 5 s" rule was dropped, since a short clip had nothing left to resume, and `viewed_percent` covers the end anyway.
+- **Each new item starts unpaused.** mpv keeps its pause state across files.
+- **Not built yet:** a test for exactly two files in mpv's playlist. The order and remove tests go through the append path.
+- **Tests:** 18 (`PlayerLibraryTest` 6, `PlayerTest` 12), 210 in all.
+
 ## 11. Not in this feature
 
 Bit-perfect output, ReplayGain, chapters, Skip Intro, playlists and liked songs, a saved queue, casting, and streaming to other devices.

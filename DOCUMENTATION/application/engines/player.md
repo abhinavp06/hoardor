@@ -1,6 +1,6 @@
 # Player engine (`hoardor::player`)
 
-Status: **Designed, awaiting the user's approval** (2026-10-03), in `features/player.md`. Nothing is built yet.
+Status: **Phases 1–2 built** (2026-10-03, `features/player.md`): playback, the queue, per-entry state. Video frames (phase 3) are wired in, waiting for TYLI's item. Tests in `tests/player/`.
 
 ## 1. Responsibilities
 
@@ -21,7 +21,15 @@ Status: **Designed, awaiting the user's approval** (2026-10-03), in `features/pl
 
 ## 3. Current state
 
-Nothing is built yet. The proposed API, tables, settings, and tests are in `features/player.md` §4–§8.
+- **Public API:** `include/hoardor/player/player.hpp`:
+  - `Settings`, `SettingLimits`, `ItemState`
+  - `Library` (any connection, one thread): `open`, `state`, `states`, `set_liked`, `save_position`, `count_play`, `load_settings`, `save_settings`
+  - `State`, `Track`, `Status`, `Resolver`, `Callbacks`, `Outputs`
+  - `VideoRenderer`: `create`, `ready`, `render`, `destroy`, `set_update_callback`
+  - `Player`: `start`, the queue (`play_now`, `add`, `jump`, `remove`, `clear`, `queue`, `current`), transport (`toggle`, `pause`, `resume`, `stop`, `next`, `previous`, `seek`, `seek_by`, `set_volume`, `set_muted`, `select_audio`, `select_subtitle`), `status`, `video`
+- **`master::file_resolver(database_file)`** (`include/hoardor/master/playback.hpp`): the resolver on `file::Library::resolve`, with its own connection, and errors in words ("its drive is offline", "the file is missing").
+- **Tables:** `player_items`, `player_settings` (player migration 1, `DATABASE.md`).
+- **Dependency:** libmpv (`third_party/CMakeLists.txt`: pkg-config `mpv`, or `MPV_ROOT` on Windows).
 
 ## 4. Roadmap
 

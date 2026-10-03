@@ -5,7 +5,7 @@ The one place that describes **every table in hoardor's SQLite database**: what 
 - **Mechanics** (connections, pragmas, statements, transactions, the migration runner) are in `engines/db.md`.
 - **Why one database, and who owns which tables:** `ARCHITECTURE.md` §3.
 
-Status: `v0.2.0` (Media library v1): file migrations 1–3, audio migrations 1–2, video migrations 1–3.
+Status: `v0.2.0` (Media library v1): file migrations 1–3, audio migrations 1–2, video migrations 1–3; plus player migration 1 on `abhinavp06/PLAYER`.
 
 ## 1. Rules
 
@@ -46,7 +46,9 @@ erDiagram
     file_entries ||--o| video_items : "entry_id (cascade)"
     video_items ||--o{ video_item_names : "entry_id (cascade)"
     video_names ||--o{ video_item_names : "name_id"
+    file_entries ||--o| player_items : "entry_id (cascade)"
     file_settings
+    player_settings
     db_migrations
 ```
 
@@ -64,6 +66,8 @@ erDiagram
 | `video_items` | `video` | one per video file read | movie or episode: descriptions, streams, poster |
 | `video_names` | `video` | one per genre or person | each name once |
 | `video_item_names` | `video` | a few per item | an item's genres, directors, writers (with a role) |
+| `player_items` | `player` | one per file played or liked | the user's state per file: position, viewed, play count, last played, liked |
+| `player_settings` | `player` | one per setting | the user's values for `player::Settings` |
 
 ## 3. Tables
 
@@ -240,6 +244,28 @@ Names no track uses are deleted at the end of each metadata pass (`remove_unused
 
 `fts5(title, show, genres, directors, tokenize = 'unicode61 remove_diacritics 2')`, rowid = `video_items.entry_id`. It has the same three triggers on `video_items` (`video_search_insert`, `video_search_update`, `video_search_delete`).
 
+### `player_items`
+
+The user's state per file: one row once a file has been played or liked. A file without a row reads as zeros.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `entry_id` | INTEGER PK | `file_entries.id`, `ON DELETE CASCADE`: the row goes with its file |
+| `position_ms` | INTEGER | where playback stopped (saved every `progress_save_seconds`, and on pause, seek, stop, and the end) |
+| `duration_ms` | INTEGER | the length as mpv measured it |
+| `viewed` | INTEGER | 1 once past `viewed_percent` or the end; it only ever turns on (`MAX`) |
+| `play_count` | INTEGER | counted once per play, at `play_count_percent` or `play_count_seconds`, or at the end |
+| `last_played_ns` | INTEGER | Unix ns of the last save |
+| `liked_ns` | INTEGER | when it was liked; 0 = not liked |
+
+Indexes: `player_items_recent (last_played_ns)` for "continue watching" and "recently played" (the home page, later); `player_items_liked (liked_ns) WHERE liked_ns > 0` (partial) for "liked songs".
+
+- **Reads for a page:** `states(entries)` passes the ids as one JSON array (`json_each`), so one statement serves any page size.
+
+### `player_settings`
+
+`key` TEXT PK, `value` TEXT: one row per `player::Settings` field (`features/player.md` §7). A value that doesn't parse or is out of range falls back to the code default.
+
 ## 4. Migration history
 
 | Component | Version | Shipped in | Change |
@@ -251,25 +277,9 @@ Names no track uses are deleted at the end of each metadata pass (`remove_unused
 | `audio` | 2 | `v0.2.0` | `audio_search` FTS5 table (backfilled) and its three triggers |
 | `video` | 2 | `v0.2.0` | `video_search` FTS5 table (backfilled) and its three triggers |
 | `file` | 3 | `v0.2.0` | Deletes the seeded Books category if it's untouched: name `Books`, kinds `text,image`, and no roots. One with folders or changed kinds stays (2026-10-03) |
+| `player` | 1 | (v0.3.0, Player) | `player_items` (with `player_items_recent` and the partial `player_items_liked`) and `player_settings` |
 | `video` | 3 | `v0.2.0` | `UPDATE video_items SET source_size = -1`: every video is read once more, because companions used to stop at the first 200 files of a folder and most movies in a big shared folder lost their poster and `.nfo` (2026-10-03). The rows stay listed until re-read |
 
 ## 5. Proposed (not built)
 
-A feature doc that changes the schema lists its tables here until they're built.
-
-**Player, first draft** (`features/player.md` §6, awaiting approval): player migration 1.
-
-```sql
-CREATE TABLE player_items (
-    entry_id INTEGER PRIMARY KEY REFERENCES file_entries(id) ON DELETE CASCADE,
-    position_ms INTEGER NOT NULL DEFAULT 0,
-    duration_ms INTEGER NOT NULL DEFAULT 0,
-    viewed INTEGER NOT NULL DEFAULT 0,
-    play_count INTEGER NOT NULL DEFAULT 0,
-    last_played_ns INTEGER NOT NULL DEFAULT 0,
-    liked_ns INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX player_items_recent ON player_items (last_played_ns);
-CREATE INDEX player_items_liked ON player_items (liked_ns) WHERE liked_ns > 0;
-CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-```
+Nothing at the moment. A feature doc that changes the schema lists its tables here until they're built.

@@ -53,3 +53,22 @@ else()
     pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat>=60 libavcodec>=60 libavutil>=58)
     target_link_libraries(hoardor_ffmpeg INTERFACE PkgConfig::FFMPEG)
 endif()
+
+# libmpv (mpv's player library, client API 2.x): plays audio and video (features/player.md §9).
+# Linux and macOS: the system's development package, found with pkg-config
+#   (Ubuntu: libmpv-dev; macOS: brew install mpv).
+# Windows: a "dev" build (include/mpv/*.h, libmpv-2.dll) with an MSVC import library mpv.lib,
+#   pointed to with -DMPV_ROOT=<folder with include/ lib/ bin/>.
+set(MPV_ROOT "" CACHE PATH "libmpv folder with include/, lib/ and bin/ (Windows)")
+add_library(hoardor_mpv INTERFACE)
+if(MPV_ROOT)
+    find_path(MPV_INCLUDE_DIR mpv/client.h HINTS ${MPV_ROOT}/include REQUIRED)
+    find_library(MPV_LIBRARY NAMES mpv libmpv HINTS ${MPV_ROOT}/lib ${MPV_ROOT} REQUIRED)
+    target_include_directories(hoardor_mpv SYSTEM INTERFACE ${MPV_INCLUDE_DIR})
+    target_link_libraries(hoardor_mpv INTERFACE ${MPV_LIBRARY})
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(MPV REQUIRED IMPORTED_TARGET mpv>=2.0)
+    target_link_libraries(hoardor_mpv INTERFACE PkgConfig::MPV)
+endif()
+

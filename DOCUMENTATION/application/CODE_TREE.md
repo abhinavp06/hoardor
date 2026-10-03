@@ -169,7 +169,22 @@ hoardor/
 │   │           ├── .resolve_root(Root&)         (private) marker at last path -> search mounts -> relocate | offline
 │   │           └── .sync_one(id, stop, progress, index, count)   (private) the per-root sync algorithm (feature doc §4.6)
 │   │
+│   ├── player/
+│   │   └── player.hpp                          ns hoardor::player: playback on libmpv, the queue, per-entry state (engines/player.md)
+│   │       ├── struct Settings                 read ahead, hwdec, languages, subtitles, resume / viewed / play-count rules, volume; ::defaults()
+│   │       ├── struct ItemState                { entry, position_ms, duration_ms, viewed, play_count, last_played_ns, liked_ns } .liked()
+│   │       ├── class Library                   player_items + player_settings on one connection
+│   │       │   └── open · state · states(entries) · set_liked · save_position · count_play · load_settings · save_settings
+│   │       ├── enum State / struct Track / struct Status   Idle|Loading|Playing|Paused · audio/subtitle tracks · what's loaded, position, volume, tracks
+│   │       ├── using Resolver / struct Callbacks / struct Outputs   entry -> path (player thread) · status, position, queue, error · "auto"/"null"
+│   │       ├── class VideoRenderer             mpv's OpenGL render API: create(get_proc_address) · render(fbo, w, h, flip) · destroy · set_update_callback
+│   │       └── class Player                    one session on its own thread; every command posted to it
+│   │           ├── static start(db_file, Resolver, Callbacks, Outputs) -> Result<unique_ptr<Player>>   sets LC_NUMERIC "C"
+│   │           ├── play_now · add · jump · remove · clear · queue · current
+│   │           └── toggle · pause · resume · stop · next · previous · seek · seek_by · set_volume · set_muted · select_audio · select_subtitle · status · video
+│   │
 │   └── master/
+│       ├── playback.hpp                        fn file_resolver(db_file) -> player::Resolver   file::Library::resolve on its own connection; errors in words
 │       └── sync_worker.hpp                     ns hoardor::master: background execution (engines/master.md)
 │           ├── struct MetadataProgress         { done, total, elapsed_ms }
 │           ├── struct MetadataReport           { read, failed, skipped, cancelled, elapsed_ms }
@@ -271,10 +286,16 @@ hoardor/
 │   │       ├── mount_points_windows.cpp        list_mount_points from GetLogicalDriveStringsW
 │   │       └── mount_points_other.cpp          returns {} (macOS until file engine phase 4)
 │   │
+│   ├── player/
+│   │   ├── library.cpp                         player::Library; (internal) schema_v1, item_columns/read_item, int/bool/text setting tables
+│   │   └── player.cpp                          VideoRenderer; Player::Impl (mpv handle, task queue, run loop: events, polls time-pos,
+│   │                                           start_item / prepare_next (mpv holds current + next) / begin_item / save_current / go_idle)
+│   │
 │   └── master/
+│       ├── playback.cpp                        file_resolver
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 192 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 210 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -365,6 +386,14 @@ hoardor/
 │   │       │                                   SmallBatchesGiveTheSameResult, PagingVisitsEveryEntryOnce
 │   │       └── playback + relocation           ResolveForPlayback, ManualRelocationWithMarker, ManualRelocationRefusesAnotherRootsFolder,
 │   │                                           ManualRelocationWithoutMarkerChecksASample, UnreadableSubfolderKeepsItsEntries
+│   ├── player/
+│   │   ├── library_test.cpp                    6 TESTs (PlayerLibraryTest): StatesAreZerosUntilPlayedOrLikedInTheAskedOrder, LikeUnlikeLikeAgain,
+│   │   │                                       ViewedOnlyEverTurnsOn, PlaysAreCounted, SettingsRoundTripWithLimitsAndBadValues, ARowGoesWithItsEntry
+│   │   └── player_test.cpp                     12 TESTs (PlayerTest, real libmpv headless + generated files): PlaysTheQueueInOrderAndCountsEachPlay,
+│   │                                           PromptActionsAddAndClearAndPlay, AnOfflineFileIsReportedOnceAndSkipped, NothingPlayableStopsInsteadOfLooping,
+│   │                                           ACorruptFileIsSkipped, PauseSeekPreviousAndNext, VideoResumesUntilViewed, MusicStartsAtTheBeginningByDefault,
+│   │                                           VolumeAndMuteAreRemembered, CommandsReturnAtOnceWhileADriveSpinsUp, RemovingTheNextOrTheCurrentItem,
+│   │                                           MastersResolverSaysOfflineAndMissing
 │   └── master/
 │       ├── metadata_pass_test.cpp              8 TESTs (MetadataPassTest, real files): TwoDrivesSyncAndReadInParallel, OneDriveAtATimeWhenTheSettingSaysSo, ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
 │       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, EachMovieFindsItsPosterInAFlatFolder, CancelStopsThePassAndTheRestWaits

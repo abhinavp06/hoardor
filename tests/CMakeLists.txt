@@ -24,6 +24,8 @@ add_executable(hoardor_tests
     video/sources_test.cpp
     video/read_test.cpp
     video/library_test.cpp
+    player/library_test.cpp
+    player/player_test.cpp
     master/sync_worker_test.cpp
     master/metadata_pass_test.cpp
 )
