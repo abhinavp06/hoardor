@@ -2,6 +2,15 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Sanitizers on the full suite again (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** The whole suite, now including the frame grabs, Plex posters, `Condition::none`, and the subtitle default, runs clean under both sanitizers:
+- **AddressSanitizer:** 0 reports.
+- **ThreadSanitizer:** 0 warnings, with `tests/tsan.supp` unchanged.
+- **Both:** 230 tests pass; the 3 permission tests skip as root.
+
+**Files:** `DOCUMENTATION/application/ARCHITECTURE.md` (§7)
+
 ### Docs audit: engine docs caught up; no mention of the app in hoardor's code (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** The user asked whether hoardor's APIs are still generic and every doc is current.

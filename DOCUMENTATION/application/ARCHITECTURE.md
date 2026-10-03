@@ -110,7 +110,7 @@ The library lives on disk in SQLite. hoardor exposes paged and streaming queries
   - sync peak memory of 6.4 MB at 5k files and 7.7 MB at 50k
   - not measured yet: a cold HDD, which needs the user's drive and `hoardor_sync`
   - **at 500k files:** a scan in 4.1 s, an incremental sync in 7.3 s, a first sync in 8.7 s; benchmark-process peak memory of 8,576 KB vs 8,456 KB at 50k. Time is linear and memory is flat (`HOARDOR_BENCH_FILES=500000`)
-- **Sanitizers:** the suite also runs clean under AddressSanitizer and ThreadSanitizer (checked again on 2026-10-03 with the player: 209 pass, 3 permission tests skip as root). ThreadSanitizer suppresses SQLite's WAL index and ffmpeg's decoder threads inside libmpv (`tests/tsan.supp`). The steps are in `CLAUDE.md` ("Build and test").
+- **Sanitizers:** the suite also runs clean under AddressSanitizer and ThreadSanitizer (checked again on 2026-10-03 with the player, then with posters, frames, and filters: 230 pass, 3 permission tests skip as root). ThreadSanitizer suppresses SQLite's WAL index and ffmpeg's decoder threads inside libmpv (`tests/tsan.supp`). The steps are in `CLAUDE.md` ("Build and test").
 
 ## Decision log
 
