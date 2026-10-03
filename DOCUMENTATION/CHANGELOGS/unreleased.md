@@ -2,6 +2,17 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Player: an opt-in mpv log, and the grain measured (2026-10-03, branch `abhinavp06/PLAYER`)
+
+**Summary:** The user found video playback "a little grainy" and asked to verify it.
+- **Measured on the VM** (`features/player.md` §10b): TYLI draws at the item's full device pixels, into an 8-bit surface. The grain is mpv's dithering of 10-bit video to 8 bits. It's at the level of ffmpeg's own reference conversion (0.47 vs 0.44), and disappears with `dither=no` (0.07), which gives banding instead.
+- **New:** `player::Outputs::log_file`. mpv writes its detailed log there (decoder, hardware decoding, scalers, dithering), to see what the user's Windows libmpv (a newer build) actually does.
+- **Not changed:** the picture settings themselves, which wait for that log.
+
+**Tests:** 213 pass. `PlayerTest.MpvWritesItsLogWhenAsked`.
+
+**Files:** `include/hoardor/player/player.hpp`, `src/player/player.cpp`, `tests/player/player_test.cpp`, `DOCUMENTATION/application/{features/player.md, CODE_TREE.md, CODE_TREE.html}`
+
 ### ThreadSanitizer with the player (2026-10-03, branch `abhinavp06/PLAYER`)
 
 **Summary:** The follow-up from the entry below. The whole suite now runs clean under ThreadSanitizer, the player's threads included: 0 warnings, 209 pass, and 3 permission tests skip as root.

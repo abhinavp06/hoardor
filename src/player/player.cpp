@@ -541,6 +541,7 @@ Result<std::unique_ptr<Player>> Player::start(const fs::path& database_file, Res
     option("keep-open", "no");
     option("audio-display", "no");   // a music file's cover is not a picture to show
     option("vo", outputs.video);
+    if (!outputs.log_file.empty()) option("log-file", utf8(outputs.log_file));
     if (outputs.audio != "auto") option("ao", outputs.audio);
     option("hwdec", s.hardware_decoding ? "auto-safe" : "no");
     // Read ahead (features/player.md §4.6): the cache also for local files, capped.

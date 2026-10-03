@@ -137,6 +137,9 @@ struct Callbacks {
 struct Outputs {
     std::string audio = "auto";
     std::string video = "libmpv";   // frames for VideoRenderer; "null" = decode nothing
+    // A diagnosis aid: mpv writes its own detailed log here (the decoder, hardware decoding,
+    // scaler, dithering, and output it chose). Empty: no log.
+    std::filesystem::path log_file;
 };
 
 // mpv's OpenGL render API (features/player.md §4.5). Every call happens on the app's render

@@ -371,6 +371,22 @@ TEST_F(PlayerTest, RemovingTheNextOrTheCurrentItem) {
     EXPECT_EQ(r.status().entry, ids["c.flac"]);
 }
 
+TEST_F(PlayerTest, MpvWritesItsLogWhenAsked) {
+    tone("a.flac", 0.5);
+    sync();
+    const fs::path log = dir.path() / "mpv.log";
+    {
+        Recorder r;
+        auto p = player::Player::start(database_file(), resolver(), r.callbacks(), {"null", "null", log});
+        ASSERT_TRUE(p.has_value()) << p.error().message;
+        (*p)->play_now({ids["a.flac"]});
+        ASSERT_TRUE(eventually([&] { return r.status().state == State::Playing; }));
+    }
+    std::ifstream in(log);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    EXPECT_NE(text.find("a.flac"), std::string::npos);   // what it opened, and how
+}
+
 TEST_F(PlayerTest, MastersResolverSaysOfflineAndMissing) {
     tone("a.flac", 0.5);
     tone("b.flac", 0.5);

@@ -277,6 +277,24 @@ CREATE TABLE player_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 - **Tests:** 18 (`PlayerLibraryTest` 6, `PlayerTest` 12), 210 in all.
 - **Phase 3 (video frames):** TYLI's `VideoView` draws through `VideoRenderer` on the VNC display (Qt 6.12 on OpenGL, Mesa llvmpipe). mpv waits up to 0.2 s for each undrawn frame (vo_libmpv), so TYLI keeps the picture drawn under its other pages while a video is loaded.
 
+## 10b. Picture quality (the user: "video playback is a little grainy", 2026-10-03)
+
+**Measured on the VM:** a 10-bit gradient clip through TYLI's video item on OpenGL (llvmpipe), paused, captured, and compared with ffmpeg's own clean scaling of the same frame.
+- **The surface:** mpv draws into exactly the item's device pixels (1575×1110 for a 1050×740 item at 150 %), so nothing is drawn small and stretched.
+- **The surface is 8 bits per channel** (`GL_RGBA8`), so mpv dithers 10-bit video down to 8 bits.
+
+| Capture | High-frequency grain (std of the residual after a 2 px blur) |
+|---|---|
+| ffmpeg's reference conversion to 8-bit | 0.44 |
+| TYLI with mpv's defaults (dithering) | 0.47 |
+| TYLI with `dither=no` | 0.07, with visible banding instead |
+
+- **Conclusion on the VM:** TYLI adds nothing. The grain is mpv's dithering, about one 8-bit step, at the reference's level. On an OLED near black, one step can be visible.
+- **To check on the user's Windows build,** whose libmpv is a 2026 build with possibly different defaults (scaler, dithering, "fast" profile):
+  - `Outputs::log_file` makes mpv write its log, which says which decoder, hardware decoding, scalers, and dithering it used.
+  - Downscaling a 4K file to a 1440p window with a cheap scaler would also read as grain.
+- **Possible remedies, after the log:** pin the scalers and the dither mode as `player::Settings` (a quality preset), or a 10-bit surface. Not decided.
+
 ## 11. Not in this feature
 
 Bit-perfect output, ReplayGain, chapters, Skip Intro, playlists and liked songs, a saved queue, casting, and streaming to other devices.
