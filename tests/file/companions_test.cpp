@@ -107,3 +107,62 @@ TEST_F(CompanionsTest, OneEntryById) {
     EXPECT_EQ(e->root_id, root.id);
     EXPECT_EQ(library->entry(id + 1000).error().code, ErrorCode::NotFound);
 }
+
+TEST_F(CompanionsTest, PrefixesFindAMoviesSidecarsInAFlatFolderOfHundreds) {
+    // 300 movies side by side, each with its .nfo, poster, and subtitles: 1,200 files.
+    for (int i = 0; i < 300; ++i) {
+        const std::string name = "films/Movie " + std::to_string(i);
+        for (const char* ext : {".mkv", ".nfo", ".jpg", ".en.srt"}) dir.write(name + ext, 1);
+    }
+    dir.write("films/poster.jpg", 1);
+    const Root root = add("Movies", dir.path() / "films");
+    const EntryId movie = id_of(root.id, "Movie 250.mkv");
+
+    // Without prefixes the first 200 files fill the list; Movie 250's are never reached.
+    EXPECT_EQ(library->companions(movie, 2).value().size(), 200u);
+    EXPECT_FALSE(names(library->companions(movie, 2).value()).contains("Movie 250.nfo"));
+
+    // "Movie 25." must not match "Movie 250.nfo".
+    const std::vector<std::string> prefixes{"Movie 250.", "Movie 250-poster.", "poster."};
+    EXPECT_EQ(names(library->companions(movie, 2, 200, prefixes).value()),
+              (std::set<std::string>{"Movie 250.nfo", "Movie 250.jpg", "Movie 250.en.srt", "poster.jpg"}));
+    const std::vector<std::string> other{"Movie 25."};
+    EXPECT_EQ(names(library->companions(id_of(root.id, "Movie 25.mkv"), 0, 200, other).value()),
+              (std::set<std::string>{"Movie 25.nfo", "Movie 25.jpg", "Movie 25.en.srt"}));
+}
+
+TEST_F(CompanionsTest, PrefixesNearestFolderFirstAndEachFileOnce) {
+    dir.write("shows/Dark/poster.jpg", 1);
+    dir.write("shows/Dark/tvshow.nfo", 1);
+    dir.write("shows/Dark/Season 1/Dark S01E01.mkv", 1);
+    dir.write("shows/Dark/Season 1/poster.jpg", 1);
+    for (int i = 0; i < 250; ++i) dir.write("shows/Dark/Season 1/Dark S01E01." + std::to_string(i) + ".srt", 1);
+    const Root root = add("Shows", dir.path() / "shows");
+    const EntryId episode = id_of(root.id, "Dark/Season 1/Dark S01E01.mkv");
+
+    // 250 subtitles no longer hide the show's poster one folder up.
+    const std::vector<std::string> prefixes{"poster.", "poster", "tvshow."};  // "poster" and "poster." overlap
+    const auto found = library->companions(episode, 2, 200, prefixes).value();
+    ASSERT_EQ(found.size(), 3u);
+    EXPECT_EQ(found[0].relative_path, "Dark/Season 1/poster.jpg");
+    EXPECT_EQ(names(found), (std::set<std::string>{"Dark/Season 1/poster.jpg", "Dark/poster.jpg", "Dark/tvshow.nfo"}));
+}
+
+TEST_F(CompanionsTest, PrefixesMatchCommonSpellings) {
+    dir.write("films/Heat/Heat.mkv", 1);
+    dir.write("films/Heat/Poster.jpg", 1);
+    dir.write("films/Heat/FOLDER.JPG", 1);
+    dir.write("films/Heat/heat.nfo", 1);   // a stem in another case: only on a case-insensitive root
+    dir.write("films/Heat/pOsTeR.png", 1);  // no common spelling: only on a case-insensitive root
+    const Root root = add("Movies", dir.path() / "films");
+    const std::vector<std::string> prefixes{"Heat.", "poster.", "folder."};
+    const EntryId movie = id_of(root.id, "Heat/Heat.mkv");
+
+    if (root.case_sensitive) {
+        EXPECT_EQ(names(library->companions(movie, 0, 200, prefixes).value()),
+                  (std::set<std::string>{"Heat/Poster.jpg", "Heat/FOLDER.JPG", "Heat/heat.nfo"}));  // heat. = lowercase "Heat."
+    }
+    ASSERT_TRUE(library->set_root_case_sensitive(root.id, false));
+    EXPECT_EQ(names(library->companions(movie, 0, 200, prefixes).value()),
+              (std::set<std::string>{"Heat/Poster.jpg", "Heat/FOLDER.JPG", "Heat/heat.nfo", "Heat/pOsTeR.png"}));
+}

@@ -142,6 +142,37 @@ TEST_F(VideoRead, EmbeddedPosterAttachment) {
     EXPECT_TRUE(video::embedded_poster(plain)->empty());
 }
 
+TEST_F(VideoRead, PosterNamedLikeTheMovie) {
+    HOARDOR_SKIP_WITHOUT_FFMPEG();
+    // Plex's layout: every movie in one folder, each poster named like its movie.
+    const fs::path f = dir.path() / "Heat (1995).mkv";
+    ASSERT_TRUE(make_video(f, "64x64", "-map 0:v -c:v libx264 -preset ultrafast -pix_fmt yuv420p"));
+    const std::vector<fs::path> companions{dir.path() / "Heat (1995).en.srt", dir.path() / "Heat (1995).jpg", dir.path() / "poster.jpg"};
+    const auto v = video::read(f, companions);
+    ASSERT_TRUE(v.has_value()) << v.error().message;
+    EXPECT_EQ(v->poster_index, 1);  // its own image beats a folder-wide poster.jpg
+}
+
+TEST(VideoCompanionPrefixes, TheFilesOwnNameThenTheCommonNames) {
+    EXPECT_EQ(video::companion_prefixes(fs::path("Movies") / "Heat (1995).mkv"),
+              (std::vector<std::string>{"Heat (1995).", "Heat (1995)-poster.", "poster.", "folder.", "cover.", "movie.",
+                                        "show.", "season.", "tvshow."}));
+}
+
+TEST_F(VideoRead, EmbeddedPosterUnderOtherNamesButNeverAFont) {
+    HOARDOR_SKIP_WITHOUT_FFMPEG();
+    const fs::path jpg = dir.path() / "art.jpg";
+    ASSERT_TRUE(test::run_ffmpeg("-f lavfi -i \"color=c=red:s=16x16:d=1\" -frames:v 1 " + quoted(jpg.string())));
+    const std::string encode = "-map 0:v -c:v libx264 -preset ultrafast -pix_fmt yuv420p -attach " + quoted(jpg.string());
+    const fs::path land = dir.path() / "land.mkv";  // Matroska's "small_cover" / "cover_land" names
+    ASSERT_TRUE(make_video(land, "64x64", encode + " -metadata:s:t mimetype=image/jpeg -metadata:s:t filename=small_cover_land.jpg"));
+    EXPECT_TRUE(video::read(land)->has_embedded_poster);
+    EXPECT_EQ(video::embedded_poster(land)->size(), fs::file_size(jpg));
+    const fs::path font = dir.path() / "font.mkv";  // an attachment called "cover" that isn't an image
+    ASSERT_TRUE(make_video(font, "64x64", encode + " -metadata:s:t mimetype=font/ttf -metadata:s:t filename=cover.ttf"));
+    EXPECT_FALSE(video::read(font)->has_embedded_poster);
+}
+
 TEST_F(VideoRead, NotAVideo) {
     HOARDOR_SKIP_WITHOUT_FFMPEG();
     const fs::path audio_only = dir.path() / "song.mkv";

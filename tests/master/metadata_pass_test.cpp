@@ -152,6 +152,28 @@ TEST_F(MetadataPassTest, ReadsVideosWithTheirNfoAndPoster) {
     EXPECT_NE(items[0].poster_entry, 0);
 }
 
+TEST_F(MetadataPassTest, EachMovieFindsItsPosterInAFlatFolder) {
+    HOARDOR_SKIP_WITHOUT_FFMPEG();
+    // Every movie in one folder: 300 other movies' sidecars sort before Zodiac's.
+    const fs::path movies = dir.path() / "Movies";
+    ASSERT_TRUE(test::make_video(movies / "Zodiac (2007).mkv", "64x64", "-map 0:v -c:v libx264 -preset ultrafast -pix_fmt yuv420p"));
+    for (int i = 0; i < 150; ++i) {
+        std::ofstream(movies / ("Movie " + std::to_string(i) + " (2000).nfo")) << "<movie></movie>";
+        std::ofstream(movies / ("Movie " + std::to_string(i) + " (2000)-poster.jpg")) << "x";
+    }
+    std::ofstream(movies / "Zodiac (2007).nfo") << "<movie><title>Zodiac</title><year>2007</year></movie>";
+    std::ofstream(movies / "Zodiac (2007)-poster.jpg") << "x";
+    settle(movies);
+    ASSERT_TRUE(library->add_root(category("Movies"), movies, "Movies", false));
+
+    sync_all();
+    const auto items = videos->items({}).value().items;
+    ASSERT_EQ(items.size(), 1u);
+    EXPECT_EQ(items[0].source, video::Source::Nfo);
+    ASSERT_NE(items[0].poster_entry, 0);
+    EXPECT_EQ(library->entry(items[0].poster_entry)->relative_path, "Zodiac (2007)-poster.jpg");
+}
+
 TEST_F(MetadataPassTest, CancelStopsThePassAndTheRestWaits) {
     HOARDOR_SKIP_WITHOUT_FFMPEG();
     const fs::path music = dir.path() / "Music";

@@ -2,6 +2,45 @@
 
 Work that is done but not yet part of a version. The newest entries come first. When a version is cut, these entries move unchanged into `v<version>.md`, and this file is emptied (see `README.md`).
 
+### Videos find their own poster and .nfo in big folders (2026-10-03, branch `abhinavp06/MEDIA_LISTING`)
+
+**Summary:** The user's Windows test: "movie and TV show covers aren't being rendered for the majority of the media. Music albums seem to work fine."
+- **Cause:** `master` gave `video::read` the first 200 companions of a video's folder (images, subtitles, `.nfo`), in name order.
+  - In a shared folder of hundreds of movies, the first ~50 movies' sidecars filled the list, so every later movie lost its poster and its `.nfo` (title from the file name).
+  - The same happened to an episode whose season folder holds many subtitle files: the show's `poster.jpg` one folder up was never reached.
+  - Music was fine because TYLI's album art uses its own lookup, with any image next to a track as a fallback.
+- **Fix:** `video` names what it can use (`companion_prefixes`), and `file::Library::companions` returns only files starting with those names, one index lookup per prefix. A movie among a thousand others now costs a few index seeks and always finds its own files.
+- **Also:**
+  - **`<name>.jpg`** (Plex's poster next to a movie in a shared folder) counts as the movie's poster, after `<name>-poster`.
+  - **Embedded posters:** besides `cover.*`, Matroska image attachments with "cover" or "poster" in their name count (`small_cover.jpg`, `cover_land.jpg`). Attachments that aren't images (fonts) never do.
+- **Video migration 3** marks every video for one more read, so existing libraries pick up the missing posters and `.nfo` descriptions on the next tag-reading pass. The rows stay listed meanwhile.
+
+**Decisions**
+- **Name prefixes rather than a higher limit:** a limit only moves the cliff, and reading a whole folder of thousands of files for each of its videos grows with the square of the folder.
+- **Common spellings on case-sensitive roots:** a prefix also matches in lowercase, Capitalized, and UPPERCASE (`Poster.jpg`, `FOLDER.JPG`), so Linux and macOS roots behave like Windows for the usual names, without a full scan.
+- **A one-time re-read (migration) rather than a "companions changed" detector.** See the follow-ups.
+
+**Tests:** 191 pass (8 new).
+- `CompanionsTest.PrefixesFindAMoviesSidecarsInAFlatFolderOfHundreds`: 300 movies with 4 files each; without prefixes the 200 limit hides Movie 250's files, with prefixes they're found; "Movie 25." doesn't match "Movie 250.nfo".
+- `CompanionsTest.PrefixesNearestFolderFirstAndEachFileOnce`: 250 subtitles in a season folder no longer hide the show's poster; nearest folder first; overlapping prefixes list a file once.
+- `CompanionsTest.PrefixesMatchCommonSpellings`: `Poster.jpg`, `FOLDER.JPG`, a stem in another case, and a mixed-case name on a case-insensitive root.
+- `VideoRead.PosterNamedLikeTheMovie`, `VideoRead.EmbeddedPosterUnderOtherNamesButNeverAFont`, `VideoCompanionPrefixes.TheFilesOwnNameThenTheCommonNames`.
+- `VideoLibraryTest.MigrationThreeReadsEveryVideoAgain`.
+- `MetadataPassTest.EachMovieFindsItsPosterInAFlatFolder`: the end-to-end reproduction, with 300 other sidecars sorting before Zodiac's. It fails on the old code (no poster, title from the name) and passes now.
+
+**Files**
+- `include/hoardor/file/library.hpp`, `src/file/library.cpp` (`companions(…, prefixes)`, `spellings`)
+- `include/hoardor/video/video.hpp`, `src/video/read.cpp` (`companion_prefixes`, `pick_poster`, `cover_attachment`)
+- `src/video/library.cpp` (migration 3)
+- `src/master/sync_worker.cpp`
+- `tests/file/companions_test.cpp`, `tests/video/read_test.cpp`, `tests/video/library_test.cpp`, `tests/master/metadata_pass_test.cpp`
+- `DOCUMENTATION/application/{DATABASE.md, CODE_TREE.md, CODE_TREE.html, features/media_listing.md, engines/file.md, engines/video.md, engines/master.md}`
+
+**Known limitations and follow-ups**
+- **A poster added later isn't noticed:** a video is read again only when the video file changes. An image or `.nfo` added beside an unchanged video waits for the next migration or a manual re-read. Follow-up: when a sync sees an image or `.nfo` added or changed, mark the videos in that folder (and up to two levels below) for re-reading.
+- **No local art at all** (Plex keeps its artwork in its own database) still means no poster. The option then is a frame from the video as its poster (a new hoardor feature).
+- `season01-poster.jpg` (a season's poster in the show folder) and `fanart` aren't used yet.
+
 ### Full-text search (audio and video) (2026-10-02, branch `abhinavp06/MEDIA_LISTING`)
 
 **Summary:** The user asked for a search bar. hoardor gets a generic `Field::Search` filter in both engines, in keeping with the generic-API rule:

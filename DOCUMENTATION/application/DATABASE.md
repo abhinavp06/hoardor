@@ -5,7 +5,7 @@ The one place that describes **every table in hoardor's SQLite database**: what 
 - **Mechanics** (connections, pragmas, statements, transactions, the migration runner) are in `engines/db.md`.
 - **Why one database, and who owns which tables:** `ARCHITECTURE.md` §3.
 
-Status: `v0.1.0` (file migration 1), plus Media library v1 built on `abhinavp06/MEDIA_LISTING`: file migration 2, audio migration 1, video migration 1.
+Status: `v0.1.0` (file migration 1), plus Media library v1 built on `abhinavp06/MEDIA_LISTING`: file migration 2, audio migrations 1–2, video migrations 1–3.
 
 ## 1. Rules
 
@@ -145,7 +145,7 @@ A category with roots can't be deleted (`InUse`).
 - `UNIQUE (root_id, path_key)`: the sync's lookup, and its fast path for unchanged files.
 - `INDEX file_entries_changed (root_id, changed_generation, id)`: `changed_entries`, where consumers page what one sync added or changed.
 - `INDEX file_entries_added (added_ns, id)`: "added" ordering for the audio and video queries.
-- `companions(entry)`: range scan of `(root_id, path_key)` over the folder's prefix, so it needs no extra index.
+- `companions(entry)`: range scan of `(root_id, path_key)` over the folder's prefix, so it needs no extra index. With name prefixes (videos), one range scan per prefix (`folder/poster.` … `folder/poster.\xF4\x90`), so a folder of thousands of sidecars costs a few index seeks.
 - `entries(root, after, limit)` pages by `(root_id, id)` through the rowid.
 
 ### `file_scan_errors`
@@ -250,6 +250,7 @@ Names no track uses are deleted at the end of each metadata pass (`remove_unused
 | `video` | 1 | (v0.2.0, Media library v1) | `video_items`, `video_names`, `video_item_names` and their indexes |
 | `audio` | 2 | (v0.2.0, Media library v1) | `audio_search` FTS5 table (backfilled) and its three triggers |
 | `video` | 2 | (v0.2.0, Media library v1) | `video_search` FTS5 table (backfilled) and its three triggers |
+| `video` | 3 | (v0.2.0, Media library v1) | `UPDATE video_items SET source_size = -1`: every video is read once more, because companions used to stop at the first 200 files of a folder and most movies in a big shared folder lost their poster and `.nfo` (2026-10-03). The rows stay listed until re-read |
 
 ## 5. Proposed (not built)
 

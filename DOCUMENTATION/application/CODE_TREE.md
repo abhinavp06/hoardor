@@ -56,7 +56,8 @@ hoardor/
 │   │       │                                   duration_ms, width, height, hdr, video_codec, frame_rate_milli, audio[], subtitles[],
 │   │       │                                   source, from_name, info_index, poster_index, has_embedded_poster
 │   │       ├── fn read(path, companions) -> Result<VideoInfo>   streams + (.nfo > tags > names) + poster pick
-│   │       ├── fn embedded_poster(path) -> Result<bytes>         attached picture or a Matroska "cover" attachment
+│   │       ├── fn companion_prefixes(path) -> vector<string>      "<name>.", "<name>-poster.", "poster.", … for file::Library::companions
+│   │       ├── fn embedded_poster(path) -> Result<bytes>         attached picture or a Matroska image attachment ("cover.*", else *cover*/*poster*)
 │   │       ├── enum Field                      Type, Title, Year, Genre, Director, Show, Season, Episode, Duration, Height, Hdr, VideoCodec,
 │   │       │                                   Added, Category, Root, Entry, Search (full-text filter)
 │   │       ├── Value, Condition, Filter, Order, PendingEntry   (as in audio)
@@ -160,7 +161,8 @@ hoardor/
 │   │           │                .apply_held_removals(id)   applies removals the mass-removal guard held
 │   │           ├── reads ······ .entry(id) · .entries(root, after, limit) · .changed_entries(root, generation, after, limit)   paged by id
 │   │           │                .scan_errors(root, limit) · .resolve(entry) -> path | RootOffline | FileMissing   (playback)
-│   │           │                .companions(entry, parent_levels, limit)   images, subtitles, .nfo in its folder (+ parents), nearest first
+│   │           │                .companions(entry, parent_levels, limit, prefixes)   images, subtitles, .nfo in its folder (+ parents), nearest first;
+│   │           │                                                          with prefixes: one index lookup per name prefix (+ common spellings)
 │   │           ├── struct Resolution            (private) { online, relocated, reason }
 │   │           ├── .path_in_volume(path)        (private) path relative to its longest containing mount point
 │   │           ├── .check_overlap(path, except) (private) rejects nested / containing roots
@@ -272,7 +274,7 @@ hoardor/
 │   └── master/
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 183 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 191 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -297,11 +299,12 @@ hoardor/
 │   ├── video/
 │   │   ├── sources_test.cpp                    7 TESTs: Nfo.{Movie, EpisodeAndShow, KodiUrlAfterTheXmlAndBrokenFiles, ReadsFromDiskIncludingUtf8},
 │   │   │                                       Names.{Episodes, Movies, SeasonFoldersAndCleaning}
-│   │   ├── read_test.cpp                       7 TESTs (VideoRead): StreamsLanguagesAndTags, HdrIsRecognized, NfoBeatsTagsAndNames_PosterIsPicked,
-│   │   │                                       EpisodeFromNamesWithTheShowsNfoAndPoster, MovieFromNameOnly, EmbeddedPosterAttachment, NotAVideo
-│   │   └── library_test.cpp                    8 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
+│   │   ├── read_test.cpp                       10 TESTs (VideoRead): StreamsLanguagesAndTags, HdrIsRecognized, NfoBeatsTagsAndNames_PosterIsPicked,
+│   │   │                                       EpisodeFromNamesWithTheShowsNfoAndPoster, MovieFromNameOnly, EmbeddedPosterAttachment, PosterNamedLikeTheMovie,
+│   │   │                                       EmbeddedPosterUnderOtherNamesButNeverAFont, NotAVideo; VideoCompanionPrefixes.TheFilesOwnNameThenTheCommonNames
+│   │   └── library_test.cpp                    9 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
 │   │                                           DirectorsGenresAndWriters, PostersComeFromCompanionImagesThatStillExist, PendingAndErrorsAndStreams,
-│   │                                           PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved
+│   │                                           MigrationThreeReadsEveryVideoAgain, PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved
 │   ├── db/
 │   │   └── database_test.cpp                   12 TESTs
 │   │       ├── Database.*                      OpensInMemoryWithForeignKeysOn, OpensFileInWalMode, OpenFailsForImpossiblePath, ReportsSqlErrors
@@ -342,8 +345,9 @@ hoardor/
 │   │   │   │                                   RootWithoutMarkerWritesNothing, ReadOnlyFolderFallsBackToNoMarker,
 │   │   │   │                                   RootCategoryCanChangeButOnlyToAnExistingOne, RemoveRootKeepsItsMarkerOnDisk
 │   │   │   └── RootMarker.RejectsMalformedFiles
-│   │   ├── companions_test.cpp                 6 TESTs (class CompanionsTest): OneEntryById, ImagesNextToATrackButNotInOtherFolders,
-│   │   │                                       AVideosNfoSubtitlesAndTheShowsFilesTwoLevelsUp, FilesDirectlyInTheRoot, CaseInsensitiveRootsAndTheLimit, UnknownEntry
+│   │   ├── companions_test.cpp                 9 TESTs (class CompanionsTest): OneEntryById, ImagesNextToATrackButNotInOtherFolders,
+│   │   │                                       AVideosNfoSubtitlesAndTheShowsFilesTwoLevelsUp, FilesDirectlyInTheRoot, CaseInsensitiveRootsAndTheLimit, UnknownEntry,
+│   │   │                                       PrefixesFindAMoviesSidecarsInAFlatFolderOfHundreds, PrefixesNearestFolderFirstAndEachFileOnce, PrefixesMatchCommonSpellings
 │   │   ├── migration_test.cpp                  4 TESTs: FileMigration.{AV010LibraryKeepsItsEntriesAndGetsAddedTimes, VideoCategoriesGainInfoOnce,
 │   │   │                                       SavedExtensionMapGainsNfo, AUserMappingOfNfoIsKept}
 │   │   └── sync_test.cpp                       30 TESTs (class SyncTest : LibraryTest; .put(relative, size, mtime), .add_music(use_marker), .music(), .paths(root))
@@ -362,8 +366,8 @@ hoardor/
 │   │       └── playback + relocation           ResolveForPlayback, ManualRelocationWithMarker, ManualRelocationRefusesAnotherRootsFolder,
 │   │                                           ManualRelocationWithoutMarkerChecksASample, UnreadableSubfolderKeepsItsEntries
 │   └── master/
-│       ├── metadata_pass_test.cpp              7 TESTs (MetadataPassTest, real files): TwoDrivesSyncAndReadInParallel, OneDriveAtATimeWhenTheSettingSaysSo, ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
-│       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, CancelStopsThePassAndTheRestWaits
+│       ├── metadata_pass_test.cpp              8 TESTs (MetadataPassTest, real files): TwoDrivesSyncAndReadInParallel, OneDriveAtATimeWhenTheSettingSaysSo, ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
+│       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, EachMovieFindsItsPosterInAFlatFolder, CancelStopsThePassAndTheRestWaits
 │       └── sync_worker_test.cpp                8 TESTs (class SyncWorkerTest: a real DB file + .music(), .add_music_root(n), .set_settings(edit))
 │           └── SyncWorkerTest.*                RunsARequestedSyncInTheBackground, DuplicateRequestsAreIgnored,
 │                                               CancelStopsTheRunningSyncAndRemovesNothing, SyncOnStartupWhenEnabled, NoStartupSyncByDefault,

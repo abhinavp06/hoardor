@@ -104,13 +104,15 @@ Phases 2 and 3 can swap if the user wants movies first.
      - `S01E02`, `1x02`, or `Season 1/…` for episodes, with the show from the folder above the season folder
 - **Movie or episode:** an `<episodedetails>` nfo, a season or episode number, or an `SxxEyy` name means an episode. Everything else in the category is a movie. TYLI decides which categories it shows as movies or as shows.
 - **Posters:**
-  - from companions: `poster`, `folder`, `cover`, `<name>-poster` (images); `season01-poster` for a season; `fanart` as a backdrop (later)
-  - otherwise a Matroska attachment named `cover*`
+  - from companions, for a movie: `<name>-poster`, `<name>` (Plex's poster next to a movie in a shared folder, added 2026-10-03), `poster`, `folder`, `cover`, `movie`; for an episode: the show's `poster`/`folder`/`cover`/`show` up the tree, then the season folder's. `season01-poster` and `fanart` (a backdrop) later
+  - otherwise an embedded poster: an MP4 cover, or a Matroska image attachment named `cover.*`, else one with "cover" or "poster" in its name (`small_cover.jpg`, `cover_land.jpg`; widened 2026-10-03). Fonts and other attachments never count
+- **Which companions (2026-10-03):** `master` asks `file::Library::companions` only for the names above (`video::companion_prefixes(path)`: `<name>.`, `<name>-poster.`, `poster.`, `folder.`, `cover.`, `movie.`, `show.`, `season.`, `tvshow.`). Before, it read the first 200 companions of the folder, so in a shared folder of hundreds of movies most never saw their own poster or `.nfo` (the user's Windows test: most movie and show covers missing). Video migration 3 reads every video once more.
 
 ### 4.4 Companions (`file::Library::companions(EntryId) → Result<std::vector<Entry>>`)
 
 - **What:** the image, subtitle, and info (`.nfo`) entries in the **same folder** as the entry, plus `tvshow.nfo` and posters up to 2 parent folders up for video.
 - **How:** read from SQLite through a range scan of `(root_id, path_key)` on the folder's prefix, so there's no new table.
+- **Name prefixes (2026-10-03):** `companions(entry, parent_levels, limit, prefixes)` returns only files whose name starts with one of the prefixes, one range scan each. A prefix also matches in lowercase, Capitalized, and UPPERCASE on case-sensitive roots (`Poster.jpg`, `FOLDER.JPG`); case-insensitive roots fold anyway. A file matching two prefixes is listed once. Without prefixes it reads the whole folder, as before (TYLI's album art).
 - **Who uses it:** metadata reading (nfo, posters) and TYLI (folder art and, later, subtitles).
 - **A new kind,** `FileKind::Info = 6`, maps `.nfo`. Migration 2 adds it to the default Movies and Shows categories' accepted kinds when they still exist.
 

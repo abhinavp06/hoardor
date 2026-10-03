@@ -71,7 +71,14 @@ CREATE TRIGGER video_search_delete AFTER DELETE ON video_items BEGIN
 END;
 )sql";
 
-constexpr std::array<db::Migration, 2> migrations{{{1, schema_v1}, {2, schema_v2}}};
+// Read every video again once: before, companions were the first 200 files of a folder, so in
+// a big shared folder most movies never saw their poster or .nfo (2026-10-03). A size that
+// can't match makes every item pending; the rows stay visible until they're re-read.
+constexpr std::string_view schema_v3 = R"sql(
+UPDATE video_items SET source_size = -1;
+)sql";
+
+constexpr std::array<db::Migration, 3> migrations{{{1, schema_v1}, {2, schema_v2}, {3, schema_v3}}};
 
 constexpr int genre_kind = 1, person_kind = 2;
 constexpr int genre_role = 1, director_role = 2, writer_role = 3;

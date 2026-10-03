@@ -207,6 +207,18 @@ TEST_F(VideoLibraryTest, PendingAndErrorsAndStreams) {
     EXPECT_EQ(back.subtitles[0].title, "SDH");
 }
 
+TEST_F(VideoLibraryTest, MigrationThreeReadsEveryVideoAgain) {
+    put("a.mkv");
+    sync();
+    store("a.mkv", movie("A", 2000));
+    ASSERT_EQ(videos->pending_count(std::nullopt).value(), 0u);
+    // A database from before migration 3 (posters cut off at 200 companions).
+    ASSERT_TRUE(db->exec("UPDATE db_migrations SET version = 2 WHERE component = 'video'"));
+    ASSERT_TRUE(video::Library::open(*db).has_value());
+    EXPECT_EQ(videos->pending_count(std::nullopt).value(), 1u);
+    EXPECT_EQ(videos->count({}).value(), 1u);  // still listed while it waits
+}
+
 TEST_F(VideoLibraryTest, PagingGroupsWithoutGapsOrRepeats) {
     for (int i = 0; i < 40; ++i) put("m" + std::to_string(i) + ".mkv");
     sync();

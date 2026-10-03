@@ -63,7 +63,7 @@ struct MetadataReport { std::uint64_t read, failed, skipped; bool cancelled; };
 ```
 
 - **The work list:** `audio::Library::pending` / `video::Library::pending`. Settled entries in roots the sync found online.
-- **Paths:** resolved once per root. Videos also get their companions (`file::Library::companions(entry, 2)`).
+- **Paths:** resolved once per root. Videos also get their companions (`file::Library::companions(entry, 2, 200, video::companion_prefixes(path))`: only the names `video::read` uses, so a big shared folder never crowds out a movie's own poster).
 - **Writes** go in short batches (`batch_max_rows` / `batch_max_milliseconds`). Callbacks never run inside a write transaction.
 - **A failed read:**
   - If the file or its root has gone (an unplugged drive), it's **skipped**, not recorded, and read on a later pass.

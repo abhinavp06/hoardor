@@ -699,8 +699,36 @@ Result<fs::path> Library::resolve(EntryId entry_id) {
 
 namespace hoardor::file {
 
-Result<std::vector<Entry>> Library::companions(EntryId entry_id, int parent_levels, std::size_t limit) {
-    auto st = db_->prepare("SELECT root_id, path_key FROM file_entries WHERE id = ?");
+namespace {
+
+// "poster." → itself, "poster.", "POSTER.", "Poster.", without repeats.
+std::vector<std::string> spellings(std::span<const std::string> prefixes, bool case_sensitive) {
+    std::vector<std::string> out;
+    const auto add = [&](std::string s) {
+        if (!case_sensitive) s = detail::ascii_lower(s);
+        if (std::find(out.begin(), out.end(), s) == out.end()) out.push_back(std::move(s));
+    };
+    for (const std::string& p : prefixes) {
+        add(p);
+        if (!case_sensitive) continue;
+        std::string lower = detail::ascii_lower(p), upper = p, capital = lower;
+        for (char& c : upper) {
+            if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+        }
+        if (!capital.empty() && capital[0] >= 'a' && capital[0] <= 'z') capital[0] = static_cast<char>(capital[0] - 'a' + 'A');
+        add(std::move(lower));
+        add(std::move(upper));
+        add(std::move(capital));
+    }
+    return out;
+}
+
+}
+
+Result<std::vector<Entry>> Library::companions(EntryId entry_id, int parent_levels, std::size_t limit,
+                                               std::span<const std::string> prefixes) {
+    auto st = db_->prepare("SELECT e.root_id, e.path_key, r.case_sensitive FROM file_entries e "
+                           "JOIN file_roots r ON r.id = e.root_id WHERE e.id = ?");
     if (!st) return std::unexpected(database_error(st.error()));
     st->bind(1, entry_id);
     auto row = st->step();
@@ -708,9 +736,12 @@ Result<std::vector<Entry>> Library::companions(EntryId entry_id, int parent_leve
     if (!*row) return std::unexpected(Error{ErrorCode::NotFound, "no such file"});
     const RootId root_id = st->column_int64(0);
     std::string folder = st->column_text(1);  // its key; trimmed to the folder below
+    // No prefixes: the whole folder (an empty prefix).
+    const std::vector<std::string> names = prefixes.empty() ? std::vector<std::string>{std::string()}
+                                                            : spellings(prefixes, st->column_int64(2) != 0);
 
-    // Entries directly in one folder: keys in [folder/, folder0) with no further '/'
-    // ('/' is 0x2F and '0' is 0x30, the same trick as the sync's subtree touch).
+    // Entries directly in one folder: keys in [folder/name, folder/name + U+10FFFF) with no
+    // further '/' after the folder (a name prefix never contains one).
     auto in_folder = db_->prepare("SELECT " + std::string(detail::entry_columns()) +
                                   " FROM file_entries WHERE root_id = ? AND path_key >= ? AND path_key < ? "
                                   "AND instr(substr(path_key, ?), '/') = 0 AND kind IN (?, ?, ?) AND id <> ? "
@@ -723,23 +754,32 @@ Result<std::vector<Entry>> Library::companions(EntryId entry_id, int parent_leve
         const bool at_root = slash == std::string::npos;
         folder = at_root ? std::string() : folder.substr(0, slash);
         const std::string prefix = at_root ? std::string() : folder + "/";
-        const std::string upper = at_root ? std::string("\xF4\x90") : folder + "0";  // above any UTF-8 key
-        in_folder->bind(1, root_id)
-            .bind(2, std::string_view(prefix))
-            .bind(3, std::string_view(upper))
-            .bind(4, static_cast<std::int64_t>(prefix.size() + 1))
-            .bind(5, static_cast<std::int64_t>(FileKind::Image))
-            .bind(6, static_cast<std::int64_t>(FileKind::Subtitle))
-            .bind(7, static_cast<std::int64_t>(FileKind::Info))
-            .bind(8, entry_id)
-            .bind(9, static_cast<std::int64_t>(limit - out.size()));
-        while (true) {
-            auto next = in_folder->step();
-            if (!next) return std::unexpected(database_error(next.error()));
-            if (!*next) break;
-            out.push_back(detail::read_entry(*in_folder));
+        const std::size_t level_start = out.size();
+        for (const std::string& name : names) {
+            if (out.size() >= limit) break;
+            const std::string lower = prefix + name;
+            const std::string upper = lower + "\xF4\x90";  // above any UTF-8 key with this start
+            in_folder->bind(1, root_id)
+                .bind(2, std::string_view(lower))
+                .bind(3, std::string_view(upper))
+                .bind(4, static_cast<std::int64_t>(prefix.size() + 1))
+                .bind(5, static_cast<std::int64_t>(FileKind::Image))
+                .bind(6, static_cast<std::int64_t>(FileKind::Subtitle))
+                .bind(7, static_cast<std::int64_t>(FileKind::Info))
+                .bind(8, entry_id)
+                .bind(9, static_cast<std::int64_t>(limit - out.size()));
+            while (true) {
+                auto next = in_folder->step();
+                if (!next) return std::unexpected(database_error(next.error()));
+                if (!*next) break;
+                Entry e = detail::read_entry(*in_folder);
+                // One file can match two prefixes (a movie named "Poster" and "poster.").
+                const bool seen = std::any_of(out.begin() + static_cast<std::ptrdiff_t>(level_start), out.end(),
+                                              [&](const Entry& o) { return o.id == e.id; });
+                if (!seen) out.push_back(std::move(e));
+            }
+            in_folder->reset();
         }
-        in_folder->reset();
         if (at_root) break;
     }
     return out;

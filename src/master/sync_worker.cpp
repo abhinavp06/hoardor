@@ -328,7 +328,8 @@ MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
                     const fs::path path = base / file::detail::from_utf8(p.relative_path);
                     std::vector<fs::path> companion_paths;
                     std::vector<file::EntryId> companion_ids;
-                    if (auto companions = files.companions(p.entry_id, 2)) {
+                    const auto prefixes = video::companion_prefixes(path);
+                    if (auto companions = files.companions(p.entry_id, 2, 200, prefixes)) {
                         for (const file::Entry& c : *companions) {
                             companion_paths.push_back(base / file::detail::from_utf8(c.relative_path));
                             companion_ids.push_back(c.id);

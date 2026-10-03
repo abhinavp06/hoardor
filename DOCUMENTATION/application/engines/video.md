@@ -28,9 +28,9 @@ Not in scope:
 ## 3. Current state
 
 - **Public API:** `include/hoardor/video/video.hpp`:
-  - `Type`, `Source`, `Stream`, `VideoInfo`, `read(path, companions)`, `embedded_poster`
+  - `Type`, `Source`, `Stream`, `VideoInfo`, `read(path, companions)`, `companion_prefixes(path)`, `embedded_poster`
   - `Field`, `Condition`, `Filter`, `Order`, `Item`, `Group`, `GroupOrder`, `PendingEntry`
   - `Library`: `open`, `pending`, `pending_count`, `store(…, poster_entry)`, `store_error`, `remove_unused_names`, `items`, `groups`, `count`, `group_count`, `item`
 - **Internal:** `src/video/sources.hpp` (`.nfo` parsing with pugixml; name parsing), tested directly.
-- **Tables:** `video_items`, `video_names`, `video_item_names` (video migration 1).
+- **Tables:** `video_items`, `video_names`, `video_item_names` (video migration 1). Migration 3 (2026-10-03) marks every item for one more read (the companion fix).
 - **Search** (since 2026-10-02): `Field::Search`, full-text over the `video_search` FTS5 table (migration 2).

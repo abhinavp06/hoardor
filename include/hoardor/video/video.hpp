@@ -71,6 +71,12 @@ struct VideoInfo {
 // and up to two folders up (file::Library::companions), nearest first.
 Result<VideoInfo> read(const std::filesystem::path& file, std::span<const std::filesystem::path> companions = {});
 
+// The file-name prefixes of the companions read() can use, for file::Library::companions:
+// "<name>." and "<name>-poster." (the file's own .nfo and poster), then "poster.", "folder.",
+// "cover.", "movie.", "show.", "season.", "tvshow.". Asking for only these keeps a folder of
+// a thousand movies from crowding the right poster out.
+std::vector<std::string> companion_prefixes(const std::filesystem::path& file);
+
 // A poster stored inside the file (a Matroska "cover" attachment, or an MP4 cover), or empty.
 Result<std::vector<std::byte>> embedded_poster(const std::filesystem::path& file);
 

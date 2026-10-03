@@ -40,15 +40,21 @@ std::string hdr_of(const AVCodecParameters* p) {
     return {};
 }
 
+// A Matroska image attachment meant as the poster: "cover.jpg" first, then any name with
+// "cover" or "poster" in it ("small_cover.jpg", "cover_land.jpg", "poster.png"). Fonts and
+// other attachments never count.
 const AVStream* cover_attachment(const AVFormatContext* context) {
+    const AVStream* fallback = nullptr;
     for (unsigned i = 0; i < context->nb_streams; ++i) {
         const AVStream* s = context->streams[i];
         if (s->codecpar->codec_type != AVMEDIA_TYPE_ATTACHMENT || s->codecpar->extradata_size <= 0) continue;
         const std::string name = lower_ascii(media::tag(s->metadata, {"filename"}));
         const std::string mime = lower_ascii(media::tag(s->metadata, {"mimetype"}));
-        if (name.starts_with("cover") && (mime.starts_with("image/") || mime.empty())) return s;
+        if (!(mime.starts_with("image/") || (mime.empty() && is_image(fs::path(name))))) continue;
+        if (name.starts_with("cover.")) return s;
+        if (!fallback && (name.find("cover") != std::string::npos || name.find("poster") != std::string::npos)) fallback = s;
     }
-    return nullptr;
+    return fallback;
 }
 
 // The poster among the companions, by name, nearest first (see features/media_listing.md §4.3).
@@ -70,7 +76,8 @@ int pick_poster(const fs::path& file, std::span<const fs::path> companions, Type
         if (int i = find({"poster", "folder", "cover", "show"}, false); i >= 0) return i;
         return find({"poster", "folder", "cover", "season"}, true);
     }
-    return find({stem + "-poster", "poster", "folder", "cover", "movie"}, true);
+    // "<name>.jpg" is Plex's poster next to a movie in a shared folder.
+    return find({stem + "-poster", stem, "poster", "folder", "cover", "movie"}, true);
 }
 
 std::vector<std::string> split_tag(const std::string& value) { return core::split_values(value, std::string_view(";/\0", 3)); }
@@ -177,6 +184,11 @@ Result<VideoInfo> read(const fs::path& file, std::span<const fs::path> companion
     if (info.duration_ms <= 0 && n.runtime_minutes > 0) info.duration_ms = std::int64_t{n.runtime_minutes} * 60'000;
     info.poster_index = pick_poster(file, companions, info.type);
     return info;
+}
+
+std::vector<std::string> companion_prefixes(const fs::path& file) {
+    const std::string stem = file::detail::to_utf8(file.stem()).text;
+    return {stem + ".", stem + "-poster.", "poster.", "folder.", "cover.", "movie.", "show.", "season.", "tvshow."};
 }
 
 Result<std::vector<std::byte>> embedded_poster(const fs::path& file) {

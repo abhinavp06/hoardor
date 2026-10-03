@@ -156,7 +156,7 @@ As built by File Sync v1 (`features/file_sync.md`, branch `abhinavp06/FILE_SCANN
 **Media library v1, phase 1 (branch `abhinavp06/MEDIA_LISTING`):**
 - `Entry::added_ns`: set when a sync first inserts an entry (file migration 2).
 - `FileKind::Info` for `.nfo`.
-- `Library::companions(entry, parent_levels, limit)`.
+- `Library::companions(entry, parent_levels, limit, prefixes)`: with name prefixes, one index lookup per prefix (2026-10-03).
 - Schema details: `DATABASE.md`.
 
 ## 4. Roadmap
