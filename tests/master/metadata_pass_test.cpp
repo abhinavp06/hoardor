@@ -152,6 +152,58 @@ TEST_F(MetadataPassTest, ReadsVideosWithTheirNfoAndPoster) {
     EXPECT_NE(items[0].poster_entry, 0);
 }
 
+// features/shows_and_extras.md: the user's release layouts end to end, through a real sync.
+TEST_F(MetadataPassTest, ShowsGetTheirEpisodesSpecialsAndExtrasAndSamplesAreSkipped) {
+    HOARDOR_SKIP_WITHOUT_FFMPEG();
+    const fs::path shows = dir.path() / "Shows";
+    const fs::path eva = shows / "[Anime Time] Neon Genesis Evangelion Complete Series [BD] [1080p]";
+    const fs::path bb = shows / "Breaking Bad (2008) Season 1-5 S01-S05 (1080p BluRay x265)";
+    const fs::path first = eva / "[Anime Time] Neon Genesis Evangelion - 01.mkv";
+    ASSERT_TRUE(test::make_video(first, "64x64", "-map 0:v -c:v libx264 -preset ultrafast -pix_fmt yuv420p"));
+    for (const fs::path& copy : {eva / "[Anime Time] Revival Of Evangelion" / "[Anime Time] Neon Genesis Evangelion - The End of Evangelion.mkv",
+                                 bb / "Season 1" / "Breaking Bad (2008) - S01E01 - Pilot (1080p BluRay x265 Silence).mkv",
+                                 bb / "Featurettes" / "Season 1" / "Making Of.mkv"}) {
+        fs::create_directories(copy.parent_path());
+        fs::copy_file(first, copy);
+    }
+    fs::create_directories(bb / "Sample");
+    std::ofstream(bb / "Sample" / "sample.mkv") << "never opened";  // would fail if it were read
+    settle(shows);
+    ASSERT_TRUE(library->add_root(category("Shows"), shows, "Shows", false));
+
+    const Run run = sync_all();
+    ASSERT_EQ(run.reports.size(), 1u);
+    EXPECT_EQ(run.reports[0].read, 4u);
+    EXPECT_EQ(run.reports[0].failed, 0u);
+    EXPECT_EQ(run.reports[0].skipped, 1u);
+
+    const std::vector<video::Field> by_show{video::Field::Show};
+    const video::Filter episodes{{{video::Field::Type, video::Value{std::int64_t{2}}}}};
+    const auto grid = videos->groups(by_show, episodes).value().items;
+    ASSERT_EQ(grid.size(), 2u);
+    EXPECT_EQ(grid[0].values, (std::vector<std::string>{"Breaking Bad"}));
+    EXPECT_EQ(grid[1].values, (std::vector<std::string>{"Neon Genesis Evangelion"}));
+    EXPECT_EQ(grid[1].items, 2u);  // the episode and the film, a special
+
+    const video::Filter specials{{{video::Field::Season, video::Value{std::int64_t{0}}}}};
+    const auto special = videos->items(specials).value().items;
+    ASSERT_EQ(special.size(), 1u);
+    EXPECT_EQ(special[0].title, "The End of Evangelion");
+
+    const video::Filter extras{{{video::Field::Type, video::Value{std::int64_t{3}}}}};
+    const auto extra = videos->items(extras).value().items;
+    ASSERT_EQ(extra.size(), 1u);
+    EXPECT_EQ(extra[0].show, "Breaking Bad");
+    EXPECT_EQ(extra[0].title, "Making Of");
+    EXPECT_EQ(extra[0].season, 1);
+
+    // The sample is stored as unreadable: never listed, never read again.
+    EXPECT_EQ(videos->pending_count(std::nullopt).value(), 0u);
+    const Run again = sync_all();
+    ASSERT_EQ(again.reports.size(), 1u);
+    EXPECT_EQ(again.reports[0].read + again.reports[0].failed + again.reports[0].skipped, 0u);
+}
+
 TEST_F(MetadataPassTest, EachMovieFindsItsPosterInAFlatFolder) {
     HOARDOR_SKIP_WITHOUT_FFMPEG();
     // Every movie in one folder: 300 other movies' sidecars sort before Zodiac's.

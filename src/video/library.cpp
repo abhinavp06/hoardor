@@ -4,6 +4,7 @@
 
 #include "core/text.hpp"
 #include "media/query.hpp"
+#include "video/sources.hpp"
 
 #include <array>
 #include <charconv>
@@ -20,7 +21,7 @@ CREATE TABLE video_items (
     source_size INTEGER NOT NULL,
     source_mtime_ns INTEGER NOT NULL,
     read_error TEXT NOT NULL DEFAULT '',
-    type INTEGER NOT NULL DEFAULT 1,           -- 1 movie, 2 episode
+    type INTEGER NOT NULL DEFAULT 1,           -- 1 movie, 2 episode, 3 extra (since migration 4)
     title TEXT NOT NULL DEFAULT '', title_key TEXT NOT NULL DEFAULT '',
     show TEXT NOT NULL DEFAULT '', show_key TEXT NOT NULL DEFAULT '',
     season INTEGER NOT NULL DEFAULT -1, episode INTEGER NOT NULL DEFAULT 0,
@@ -78,7 +79,14 @@ constexpr std::string_view schema_v3 = R"sql(
 UPDATE video_items SET source_size = -1;
 )sql";
 
-constexpr std::array<db::Migration, 3> migrations{{{1, schema_v1}, {2, schema_v2}, {3, schema_v3}}};
+// Read every video again once (2026-10-12, features/shows_and_extras.md): names now find more
+// episodes (" - 01", "Episode 1", "E01", seasons in longer folder names), extras (type 3), and
+// samples (skipped), and the show's name is cleaned of release words. Same trick as migration 3.
+constexpr std::string_view schema_v4 = R"sql(
+UPDATE video_items SET source_size = -1;
+)sql";
+
+constexpr std::array<db::Migration, 4> migrations{{{1, schema_v1}, {2, schema_v2}, {3, schema_v3}, {4, schema_v4}}};
 
 constexpr int genre_kind = 1, person_kind = 2;
 constexpr int genre_role = 1, director_role = 2, writer_role = 3;
@@ -375,6 +383,147 @@ Result<std::uint64_t> Library::remove_unused_names() {
     if (!st) return std::unexpected(database_error(st.error()));
     if (auto r = st->run(); !r) return std::unexpected(database_error(r.error()));
     return static_cast<std::uint64_t>(db_->changes());
+}
+
+Result<std::uint64_t> Library::attach(RootId root) {
+    auto sensitivity = db_->prepare("SELECT case_sensitive FROM file_roots WHERE id = ?");
+    if (!sensitivity) return std::unexpected(database_error(sensitivity.error()));
+    sensitivity->bind(1, root);
+    auto found = sensitivity->step();
+    if (!found) return std::unexpected(database_error(found.error()));
+    if (!*found) return 0;
+    const bool case_sensitive = sensitivity->column_int64(0) != 0;
+    // The file engine's path_key: the path, ASCII-lowercased on a case-insensitive root.
+    const auto key_of = [&](std::string path) {
+        if (!case_sensitive) {
+            for (char& c : path) {
+                if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+            }
+        }
+        return path;
+    };
+    // Everything below a folder: path keys from "<folder>/" up to "<folder>0" ('0' follows '/').
+    const auto bind_folder = [&](db::Statement& st, int at, const std::string& folder) {
+        const std::string low = key_of(folder + "/");
+        std::string high = low;
+        high.back() = '0';
+        st.bind(at, root).bind(at + 1, std::string_view(low)).bind(at + 2, std::string_view(high));
+    };
+    constexpr std::string_view below = "FROM file_entries e JOIN video_items t ON t.entry_id = e.id "
+                                       "WHERE e.root_id = ? AND e.path_key >= ? AND e.path_key < ? AND t.read_error = '' ";
+
+    auto episode_of_show = db_->prepare("SELECT t.show " + std::string(below) + "AND t.type = 2 AND t.show_key = ? LIMIT 1");
+    auto main_show = db_->prepare("SELECT t.show, COUNT(*) AS n " + std::string(below) +
+                                  "AND t.type = 2 AND t.season <> 0 AND t.show <> '' GROUP BY t.show_key ORDER BY n DESC LIMIT 1");
+    auto main_movie = db_->prepare("SELECT t.title, t.year " + std::string(below) + "AND t.type = 1 ORDER BY e.size DESC LIMIT 1");
+    auto to_special = db_->prepare("UPDATE video_items SET type = 2, season = 0, episode = 0, show = ?, show_key = ?, "
+                                   "title = ?, title_key = ? WHERE entry_id = ?");
+    auto owner = db_->prepare("UPDATE video_items SET show = ?, show_key = ?, year = ? WHERE entry_id = ? AND (show <> ? OR year <> ?)");
+    auto candidates = db_->prepare(
+        "SELECT t.entry_id, e.relative_path, t.type, t.title FROM video_items t JOIN file_entries e ON e.id = t.entry_id "
+        "WHERE e.root_id = ? AND t.read_error = '' AND (t.type = 3 OR (t.type = 1 AND t.source <> ?)) AND t.entry_id > ? "
+        "ORDER BY t.entry_id LIMIT 200");
+    for (auto* st : {&episode_of_show, &main_show, &main_movie, &to_special, &owner, &candidates}) {
+        if (!*st) return std::unexpected(database_error(st->error()));
+    }
+
+    struct Candidate {
+        EntryId entry;
+        std::string path;
+        Type type;
+        std::string title;
+    };
+    std::uint64_t changed = 0;
+    for (EntryId after = 0;;) {
+        candidates->bind(1, root).bind(2, static_cast<std::int64_t>(Source::Nfo)).bind(3, after);
+        std::vector<Candidate> page;
+        while (true) {
+            auto row = candidates->step();
+            if (!row) return std::unexpected(database_error(row.error()));
+            if (!*row) break;
+            page.push_back({candidates->column_int64(0), candidates->column_text(1), static_cast<Type>(candidates->column_int64(2)),
+                            candidates->column_text(3)});
+        }
+        candidates->reset();
+        if (page.empty()) return changed;
+        after = page.back().entry;
+
+        for (const Candidate& c : page) {
+            // The folders, top first, as root-relative paths ("a", "a/b", …).
+            std::vector<std::string> names, paths;
+            for (std::size_t start = 0, slash; (slash = c.path.find('/', start)) != std::string::npos; start = slash + 1) {
+                names.push_back(c.path.substr(start, slash - start));
+                paths.push_back(c.path.substr(0, slash));
+            }
+
+            if (c.type == Type::Movie) {
+                // A movie below a show's own folder (its name is the show's) is a special.
+                for (std::size_t d = names.size(); d-- > 0;) {
+                    const std::string name = detail::show_name(names[d]);
+                    if (name.empty()) continue;
+                    bind_folder(*episode_of_show, 1, paths[d]);
+                    episode_of_show->bind(4, std::string_view(core::sort_key(name)));
+                    auto row = episode_of_show->step();
+                    if (!row) return std::unexpected(database_error(row.error()));
+                    const std::string show = *row ? episode_of_show->column_text(0) : std::string();
+                    episode_of_show->reset();
+                    if (show.empty()) continue;
+                    // "Dragon Ball Z - Movie 01 - Dead Zone" -> "Movie 01 - Dead Zone"
+                    std::string title = c.title;
+                    const std::string prefix = core::sort_key(show + " - ");
+                    if (title.size() > show.size() + 3 && core::sort_key(title.substr(0, show.size() + 3)) == prefix) {
+                        title = title.substr(show.size() + 3);
+                    }
+                    to_special->bind(1, std::string_view(show))
+                        .bind(2, std::string_view(core::sort_key(show)))
+                        .bind(3, std::string_view(title))
+                        .bind(4, std::string_view(core::sort_key(title)))
+                        .bind(5, c.entry);
+                    if (auto r = to_special->run(); !r) return std::unexpected(database_error(r.error()));
+                    to_special->reset();
+                    ++changed;
+                    break;
+                }
+                continue;
+            }
+
+            // An extra: the show of the episodes under the folder above its extras folder, else
+            // the movie there.
+            const auto extras = detail::extras_folder(names);
+            if (!extras || *extras == 0) continue;
+            const std::string& folder = paths[*extras - 1];
+            std::string name;
+            std::int64_t year = 0;
+            bool known = false;
+            bind_folder(*main_show, 1, folder);
+            if (auto row = main_show->step(); !row) return std::unexpected(database_error(row.error()));
+            else if (*row) {
+                name = main_show->column_text(0);
+                known = true;
+            }
+            main_show->reset();
+            if (!known) {
+                bind_folder(*main_movie, 1, folder);
+                if (auto row = main_movie->step(); !row) return std::unexpected(database_error(row.error()));
+                else if (*row) {
+                    name = main_movie->column_text(0);
+                    year = main_movie->column_int64(1);
+                    known = true;
+                }
+                main_movie->reset();
+            }
+            if (!known) continue;  // the name guessed when it was read stays
+            owner->bind(1, std::string_view(name))
+                .bind(2, std::string_view(core::sort_key(name)))
+                .bind(3, year)
+                .bind(4, c.entry)
+                .bind(5, std::string_view(name))
+                .bind(6, year);
+            if (auto r = owner->run(); !r) return std::unexpected(database_error(r.error()));
+            owner->reset();
+            changed += db_->changes() > 0 ? 1 : 0;
+        }
+    }
 }
 
 Result<core::Page<Item>> Library::items(const Filter& filter, std::span<const Order> order,

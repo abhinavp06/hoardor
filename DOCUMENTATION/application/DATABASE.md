@@ -5,7 +5,7 @@ The one place that describes **every table in hoardor's SQLite database**: what 
 - **Mechanics** (connections, pragmas, statements, transactions, the migration runner) are in `engines/db.md`.
 - **Why one database, and who owns which tables:** `ARCHITECTURE.md` §3.
 
-Status: `v0.2.0` (Media library v1): file migrations 1–3, audio migrations 1–2, video migrations 1–3; plus audio migration 3 and player migrations 1–2 in `v0.3.0`; player migration 3 (playlists) on `abhinavp06/PLAYLISTS`.
+Status: `v0.2.0` (Media library v1): file migrations 1–3, audio migrations 1–2, video migrations 1–3; plus audio migration 3 and player migrations 1–2 in `v0.3.0`; player migration 3 (playlists) and video migration 4 (shows and extras) in `v0.4.0`.
 
 ## 1. Rules
 
@@ -66,7 +66,7 @@ erDiagram
 | `audio_tracks` | `audio` | one per audio file read | tags and stream info, with sort keys |
 | `audio_names` | `audio` | one per artist or genre | each name once (identity: its sort key) |
 | `audio_track_names` | `audio` | a few per track | a track's artists and genres |
-| `video_items` | `video` | one per video file read | movie or episode: descriptions, streams, poster |
+| `video_items` | `video` | one per video file read | movie, episode, or extra: descriptions, streams, poster |
 | `video_names` | `video` | one per genre or person | each name once |
 | `video_item_names` | `video` | a few per item | an item's genres, directors, writers (with a role) |
 | `player_items` | `player` | one per file played or liked | the user's state per file: position, viewed, play count, last played, liked |
@@ -219,7 +219,7 @@ Names no track uses are deleted at the end of each metadata pass (`remove_unused
 |---|---|---|
 | `entry_id` | INTEGER PK → `file_entries` ON DELETE CASCADE | |
 | `source_size`, `source_mtime_ns`, `read_error` | | as in `audio_tracks` |
-| `type` | INTEGER | `video::Type`: 1 movie, 2 episode |
+| `type` | INTEGER | `video::Type`: 1 movie, 2 episode, 3 extra (since migration 4; `show` is then the show or movie it belongs to) |
 | `title` / `title_key` | TEXT | the movie's or episode's title / its sort key |
 | `show` / `show_key` | TEXT | episodes |
 | `season`, `episode` | INTEGER | -1 / 0 = unknown; season 0 = specials |
@@ -301,6 +301,7 @@ Read as `playlists()`: pinned first, then `sort`, with each one's track count an
 | `player` | 3 | (v0.4.0, Playlists) | `player_playlists` and `player_playlist_items` with `player_playlist_items_order` and `player_playlist_items_entry` |
 | `player` | 2 | (v0.3.0, 2026-10-03) | Deletes a stored `subtitles_on = 0`: subtitles became on by default, and the player had saved the old default with every volume change (no data lost: no one could have chosen it in TYLI yet) |
 | `video` | 3 | `v0.2.0` | `UPDATE video_items SET source_size = -1`: every video is read once more, because companions used to stop at the first 200 files of a folder and most movies in a big shared folder lost their poster and `.nfo` (2026-10-03). The rows stay listed until re-read |
+| `video` | 4 | `v0.4.0` | `UPDATE video_items SET source_size = -1`: every video is read once more with the widened name rules (more episode patterns, extras as type 3, samples skipped, cleaned show names; `features/shows_and_extras.md`, 2026-10-12). The rows stay listed until re-read |
 
 ## 5. Proposed (not built)
 

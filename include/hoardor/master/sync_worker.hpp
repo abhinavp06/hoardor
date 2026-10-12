@@ -27,7 +27,7 @@ struct MetadataProgress {
 struct MetadataReport {
     std::uint64_t read = 0;     // stored
     std::uint64_t failed = 0;   // unreadable: recorded, not retried until the file changes
-    std::uint64_t skipped = 0;  // gone or its drive went away: left for a later pass
+    std::uint64_t skipped = 0;  // gone or its drive went away (left for a later pass), or a sample clip (never read)
     bool cancelled = false;
     std::int64_t elapsed_ms = 0;
 };

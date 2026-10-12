@@ -84,7 +84,11 @@ std::vector<std::string> split_tag(const std::string& value) { return core::spli
 
 }
 
-Result<VideoInfo> read(const fs::path& file, std::span<const fs::path> companions) {
+Result<VideoInfo> read(const fs::path& file, std::span<const fs::path> companions, const fs::path& root) {
+    // A sample clip is never listed; it's skipped before the drive is read.
+    const Described name = detail::from_name(file, root);
+    if (name.kind == Described::Kind::Sample) return std::unexpected(Error{std::string(sample_error)});
+
     auto media = media::Media::open(file);
     if (!media) return std::unexpected(Error{media.error()});
     const AVStream* video = media->first_stream(AVMEDIA_TYPE_VIDEO);
@@ -137,7 +141,6 @@ Result<VideoInfo> read(const fs::path& file, std::span<const fs::path> companion
             }
         }
     }
-    const Described name = detail::from_name(file);
     using media::any_tag;
     const std::string tag_title = any_tag(*media, {"title"});
     const std::string tag_show = any_tag(*media, {"show"});
@@ -145,9 +148,11 @@ Result<VideoInfo> read(const fs::path& file, std::span<const fs::path> companion
     const std::string tag_episode = any_tag(*media, {"episode_sort", "episode_id"});
     const std::string tag_date = any_tag(*media, {"date_released", "date", "year", "creation_time_original"});
 
-    const bool episode = (nfo && nfo->kind == Described::Kind::Episode) || !tag_show.empty() || !tag_season.empty() ||
-                         name.kind == Described::Kind::Episode;
-    info.type = episode ? Type::Episode : Type::Movie;
+    // An extras folder wins over everything else: a featurette tagged like an episode is still an extra.
+    const bool extra = name.kind == Described::Kind::Extra;
+    const bool episode = !extra && ((nfo && nfo->kind == Described::Kind::Episode) || !tag_show.empty() ||
+                                    !tag_season.empty() || name.kind == Described::Kind::Episode);
+    info.type = extra ? Type::Extra : episode ? Type::Episode : Type::Movie;
 
     const auto first = [](std::initializer_list<std::string> values) {
         for (const auto& v : values) {
@@ -159,7 +164,8 @@ Result<VideoInfo> read(const fs::path& file, std::span<const fs::path> companion
     const Described& n = nfo ? *nfo : none;
     const Described& show = show_nfo ? *show_nfo : none;
 
-    info.title = first({n.title, tag_title});
+    // An extra's file name says more than its tag ("Deleted Scenes - Bingo").
+    info.title = extra ? first({n.title, name.title}) : first({n.title, tag_title});
     if (info.title.empty()) {
         info.title = name.title;
         info.from_name = true;
@@ -167,15 +173,21 @@ Result<VideoInfo> read(const fs::path& file, std::span<const fs::path> companion
         if (info.title.empty() && episode && name.episode > 0) info.title = "Episode " + std::to_string(name.episode);
         if (info.title.empty()) info.title = file::detail::to_utf8(file.stem()).text;
     }
-    info.source = nfo ? Source::Nfo : (!tag_title.empty() ? Source::Tags : Source::Name);
+    if (extra && n.title.empty()) info.from_name = true;
+    info.source = nfo ? Source::Nfo : (!tag_title.empty() && !extra ? Source::Tags : Source::Name);
     if (episode) {
         info.show = first({n.show, show.title, tag_show, name.show});
         info.season = n.season >= 0 ? n.season : (!tag_season.empty() ? media::number_pair(tag_season).first : name.season);
         info.episode = n.episode > 0 ? n.episode : (!tag_episode.empty() ? media::number_pair(tag_episode).first : name.episode);
+    } else if (extra) {
+        // What it belongs to, guessed from the folder above the extras; Library::attach()
+        // replaces the guess with the real show's or movie's name.
+        info.show = first({show.title, name.show});
+        info.season = name.season;
     }
     info.date = first({n.date, tag_date});
     info.year = n.year > 0 ? n.year : media::year_of(tag_date);
-    if (info.year == 0) info.year = episode ? media::year_of(info.date) : name.year;
+    if (info.year == 0) info.year = episode ? media::year_of(info.date) : name.year;  // an extra: its show's or movie's
     if (info.year == 0 && episode) info.year = show.year;
     info.plot = first({n.plot, any_tag(*media, {"description", "synopsis", "comment"})});
     info.genres = !n.genres.empty() ? n.genres : (!show.genres.empty() ? show.genres : split_tag(any_tag(*media, {"genre"})));

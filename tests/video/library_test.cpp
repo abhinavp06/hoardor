@@ -31,8 +31,8 @@ protected:
         videos = std::make_unique<video::Library>(std::move(*lib));
     }
 
-    void put(const std::string& relative) {
-        const auto p = dir.write(fs::path("films") / relative, 1);
+    void put(const std::string& relative, std::size_t size = 1) {
+        const auto p = dir.write(fs::path("films") / relative, size);
         fs::last_write_time(p, file::detail::from_unix_ns(old_mtime));
     }
 
@@ -74,6 +74,17 @@ protected:
         v.duration_ms = 3'000'000;
         return v;
     }
+
+    static video::VideoInfo extra(std::string guessed_owner, std::string title) {
+        video::VideoInfo v;
+        v.type = video::Type::Extra;
+        v.show = guessed_owner;
+        v.title = title;
+        v.height = 1080;
+        return v;
+    }
+
+    video::Item item(const std::string& relative) { return videos->item(ids.at(relative)).value(); }
 
     std::unique_ptr<video::Library> videos;
     file::RootId root = 0;
@@ -275,6 +286,17 @@ TEST_F(VideoLibraryTest, MigrationThreeReadsEveryVideoAgain) {
     EXPECT_EQ(videos->count({}).value(), 1u);  // still listed while it waits
 }
 
+TEST_F(VideoLibraryTest, MigrationFourReadsEveryVideoAgain) {
+    put("a.mkv");
+    sync();
+    store("a.mkv", movie("A", 2000));
+    // A database from before migration 4 (names found fewer episodes, no extras or samples).
+    ASSERT_TRUE(db->exec("UPDATE db_migrations SET version = 3 WHERE component = 'video'"));
+    ASSERT_TRUE(video::Library::open(*db).has_value());
+    EXPECT_EQ(videos->pending_count(std::nullopt).value(), 1u);
+    EXPECT_EQ(videos->count({}).value(), 1u);
+}
+
 TEST_F(VideoLibraryTest, PagingGroupsWithoutGapsOrRepeats) {
     for (int i = 0; i < 40; ++i) put("m" + std::to_string(i) + ".mkv");
     sync();
@@ -324,4 +346,78 @@ TEST_F(VideoLibraryTest, SearchTitlesShowsAndDirectors) {
     EXPECT_EQ(found("dark"), 1u);
     EXPECT_EQ(found("secr"), 1u);
     EXPECT_EQ(found("nothing"), 0u);
+}
+
+// features/shows_and_extras.md §3
+TEST_F(VideoLibraryTest, AttachMakesSpecialsOfFilmsInAShowsOwnFolder) {
+    const std::string dbz = "DRAGON BALL Z (1989-2019) - The COMPLETE Series/";
+    put(dbz + "Season 1/Dragon Ball Z - S01E01.mkv");
+    put(dbz + "2a. Movies (1989-2018)/Dragon Ball Z - Movie 01 - Dead Zone (1989 BluRay).mkv");
+    put(dbz + "2a. Movies (1989-2018)/Described by an nfo.mkv");
+    // A director's folder holding a mini-series: its films aren't the series' specials.
+    put("Krzysztof Kieslowski/Dekalog (1989)/Dekalog S01E01.mkv");
+    put("Krzysztof Kieslowski/Blue (1993)/Blue (1993).mkv");
+    put("Arrival (2016)/Arrival (2016).mkv");
+    put("Loose (2001).mkv");
+    sync("Shows");
+    store(dbz + "Season 1/Dragon Ball Z - S01E01.mkv", episode("Dragon Ball Z", 1, 1, "The New Threat"));
+    store(dbz + "2a. Movies (1989-2018)/Dragon Ball Z - Movie 01 - Dead Zone (1989 BluRay).mkv",
+          movie("Dragon Ball Z - Movie 01 - Dead Zone", 1989));
+    auto described = movie("Bardock", 1990);
+    described.source = video::Source::Nfo;  // an .nfo said "movie": left alone
+    store(dbz + "2a. Movies (1989-2018)/Described by an nfo.mkv", described);
+    store("Krzysztof Kieslowski/Dekalog (1989)/Dekalog S01E01.mkv", episode("Dekalog", 1, 1, "One"));
+    store("Krzysztof Kieslowski/Blue (1993)/Blue (1993).mkv", movie("Blue", 1993));
+    store("Arrival (2016)/Arrival (2016).mkv", movie("Arrival", 2016));
+    store("Loose (2001).mkv", movie("Loose", 2001));
+
+    EXPECT_EQ(videos->attach(root).value(), 1u);
+    const auto special = item(dbz + "2a. Movies (1989-2018)/Dragon Ball Z - Movie 01 - Dead Zone (1989 BluRay).mkv");
+    EXPECT_EQ(special.type, video::Type::Episode);
+    EXPECT_EQ(special.season, 0);
+    EXPECT_EQ(special.show, "Dragon Ball Z");          // the episodes' spelling, not the folder's
+    EXPECT_EQ(special.title, "Movie 01 - Dead Zone");  // without the show's name in front
+    EXPECT_EQ(special.year, 1989);
+    EXPECT_EQ(item(dbz + "2a. Movies (1989-2018)/Described by an nfo.mkv").type, video::Type::Movie);
+    EXPECT_EQ(item("Krzysztof Kieslowski/Blue (1993)/Blue (1993).mkv").type, video::Type::Movie);
+    EXPECT_EQ(item("Arrival (2016)/Arrival (2016).mkv").type, video::Type::Movie);
+    EXPECT_EQ(item("Loose (2001).mkv").type, video::Type::Movie);
+
+    // The show's page lists it under season 0; a second pass changes nothing.
+    const Filter dbz_seasons{{{Field::Type, Value{std::int64_t{2}}}, {Field::Show, Value{"Dragon Ball Z"}}}};
+    EXPECT_EQ(videos->count(dbz_seasons).value(), 2u);
+    EXPECT_EQ(videos->attach(root).value(), 0u);
+}
+
+TEST_F(VideoLibraryTest, AttachNamesExtrasAfterTheirShowOrMovie) {
+    const std::string bb = "Breaking Bad (2008) Season 1-5 (1080p BluRay)/";
+    put(bb + "Season 1/Breaking Bad (2008) - S01E01 - Pilot.mkv");
+    put(bb + "Featurettes/Season 1/Deleted Scenes/Bingo.mkv");
+    put("Amelie (2001) (1080p BluRay)/Amelie (2001).mkv", 3);
+    put("Amelie (2001) (1080p BluRay)/Amelie (2001) sample cut.mkv", 2);  // smaller: not the main film
+    put("Amelie (2001) (1080p BluRay)/Featurettes/Trailer.mkv");
+    put("Nobody/Extras/Interview.mkv");
+    sync("Movies");
+    store(bb + "Season 1/Breaking Bad (2008) - S01E01 - Pilot.mkv", episode("Breaking Bad", 1, 1, "Pilot"));
+    store(bb + "Featurettes/Season 1/Deleted Scenes/Bingo.mkv", extra("Breaking Bad", "Deleted Scenes - Bingo"));
+    store("Amelie (2001) (1080p BluRay)/Amelie (2001).mkv", movie("Am\xC3\xA9lie", 2001));  // tagged: not the folder's spelling
+    store("Amelie (2001) (1080p BluRay)/Amelie (2001) sample cut.mkv", movie("Amelie cut", 2001));
+    store("Amelie (2001) (1080p BluRay)/Featurettes/Trailer.mkv", extra("Amelie", "Trailer"));
+    store("Nobody/Extras/Interview.mkv", extra("Nobody", "Interview"));
+
+    EXPECT_EQ(videos->attach(root).value(), 1u);  // only the trailer's owner changes
+    EXPECT_EQ(item(bb + "Featurettes/Season 1/Deleted Scenes/Bingo.mkv").show, "Breaking Bad");
+    const auto trailer = item("Amelie (2001) (1080p BluRay)/Featurettes/Trailer.mkv");
+    EXPECT_EQ(trailer.show, "Am\xC3\xA9lie");
+    EXPECT_EQ(trailer.year, 2001);
+    EXPECT_EQ(item("Nobody/Extras/Interview.mkv").show, "Nobody");  // nothing to tie it to: the guess stays
+
+    // A movie's page finds its extras by its title and year; the grids never see them.
+    const Filter amelie_extras{{{Field::Type, Value{std::int64_t{3}}}, {Field::Show, Value{"Am\xC3\xA9lie"}},
+                                {Field::Year, Value{std::int64_t{2001}}}}};
+    EXPECT_EQ(videos->count(amelie_extras).value(), 1u);
+    const Filter movies{{{Field::Type, Value{std::int64_t{1}}}}};
+    EXPECT_EQ(videos->count(movies).value(), 2u);
+    const Filter episodes{{{Field::Type, Value{std::int64_t{2}}}}};
+    EXPECT_EQ(videos->count(episodes).value(), 1u);
 }

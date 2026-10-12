@@ -48,6 +48,7 @@ public:
 ## 1a. Reading metadata after a sync (Media library v1, phase 4)
 
 After each requested sync, and unless it was cancelled, `SyncWorker` **queues a metadata job** for that scope (since 2026-10-02; it used to run inside the sync). The job reads the scope's audio and video files that are new, changed, or never read, on the same thread, while the drives are awake (`features/media_listing.md` §4.1).
+- **Videos are read with their library folder** (`video::read(path, companions, root)`, since 2026-10-12), so names come only from the folders below it. A sample clip isn't opened: it's stored as unreadable and counted as skipped. After a folder's videos are read (if any were stored), `video::Library::attach(root)` runs in its own short transaction: a show's films become its specials, and extras get their show's or movie's name (`features/shows_and_extras.md`).
 - **Syncs go ahead of metadata jobs.** A sync request pauses a running pass, which resumes after the sync.
 - **`syncing()` / `reading()`** tell them apart.
 - **One worker per physical drive** (since 2026-10-02):

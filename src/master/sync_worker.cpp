@@ -319,6 +319,7 @@ MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
                 }
             }
 
+            bool videos_stored = false;
             for (video::EntryId after = 0; !stop.stop_requested() && !lost;) {
                 auto page = videos.pending(scope, after, 200, root.id);
                 if (!page || page->empty()) break;
@@ -335,8 +336,9 @@ MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
                             companion_ids.push_back(c.id);
                         }
                     }
-                    auto info = video::read(path, companion_paths);
-                    if (!info && gone(path)) {
+                    auto info = video::read(path, companion_paths, base);
+                    const bool sample = !info && info.error().message == video::sample_error;
+                    if (!info && !sample && gone(path)) {
                         count(&MetadataReport::skipped);
                         continue;
                     }
@@ -344,10 +346,19 @@ MetadataReport SyncWorker::read_metadata(Scope scope, std::stop_token stop) {
                     if (info) {
                         const file::EntryId poster = info->poster_index >= 0 ? companion_ids[static_cast<std::size_t>(info->poster_index)] : 0;
                         if (videos.store(p.entry_id, p.size, p.mtime_ns, *info, poster)) count(&MetadataReport::read);
+                        videos_stored = true;
                     } else if (videos.store_error(p.entry_id, p.size, p.mtime_ns, info.error().message)) {
-                        count(&MetadataReport::failed);
+                        // A sample is stored as unreadable, so it's never listed or read again.
+                        count(sample ? &MetadataReport::skipped : &MetadataReport::failed);
                     }
                     after_write();
+                }
+            }
+            if (videos_stored && !stop.stop_requested() && !lost) {
+                // Specials and extras need the folder's other videos (video::Library::attach).
+                commit();
+                if (auto tx_attach = db::Transaction::begin(db)) {
+                    if (videos.attach(root.id)) (void)tx_attach->commit();
                 }
             }
         }

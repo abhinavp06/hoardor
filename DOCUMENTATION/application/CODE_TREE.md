@@ -51,11 +51,13 @@ hoardor/
 │   │
 │   ├── video/
 │   │   └── video.hpp                           ns hoardor::video: the video engine (engines/video.md)
-│   │       ├── enum Type (Movie=1, Episode=2) · enum Source (Name=1, Tags=2, Nfo=3) · struct Stream { language, codec, channels, title }
+│   │       ├── enum Type (Movie=1, Episode=2, Extra=3) · enum Source (Name=1, Tags=2, Nfo=3) · struct Stream { language, codec, channels, title }
 │   │       ├── struct VideoInfo                type, title, show, season, episode, year, date, plot, genres[], directors[], writers[],
 │   │       │                                   duration_ms, width, height, hdr, video_codec, frame_rate_milli, audio[], subtitles[],
 │   │       │                                   source, from_name, info_index, poster_index, has_embedded_poster
-│   │       ├── fn read(path, companions) -> Result<VideoInfo>   streams + (.nfo > tags > names) + poster pick
+│   │       ├── sample_error                      read()'s error for a sample clip (never opened, never listed)
+│   │       ├── fn read(path, companions, root) -> Result<VideoInfo>   streams + (extras folder > .nfo > tags > names) + poster pick;
+│   │       │                                   names from the folders below `root` (features/shows_and_extras.md)
 │   │       ├── fn companion_prefixes(path) -> vector<string>      "<name>.", "<name>-poster.", "poster.", … for file::Library::companions
 │   │       ├── fn embedded_poster(path) -> Result<bytes>         attached picture or a Matroska image attachment ("cover.*", else *cover*/*poster*)
 │   │       ├── struct Frame { width, height, rgb }  · default_frame_positions {0.15, 0.30, 0.50}   (features/posters.md)
@@ -70,6 +72,7 @@ hoardor/
 │   │       │                                     poster_entry, embedded_poster_entry, any_online, first_entry (first real episode / any copy) }
 │   │       ├── enum GroupOrder                 Values, AddedLast, Year, Items
 │   │       └── class Library                   open · pending · pending_count · store(…, poster_entry) · store_error · remove_unused_names
+│   │                                           · attach(root) (a show's films become its specials; extras get their show's or movie's name)
 │   │                                           · items · groups · count · group_count · item
 │   │
 │   ├── db/
@@ -196,7 +199,7 @@ hoardor/
 │       ├── playback.hpp                        fn file_resolver(db_file) -> player::Resolver   file::Library::resolve on its own connection; errors in words
 │       └── sync_worker.hpp                     ns hoardor::master: background execution (engines/master.md)
 │           ├── struct MetadataProgress         { done, total, elapsed_ms }
-│           ├── struct MetadataReport           { read, failed, skipped, cancelled, elapsed_ms }
+│           ├── struct MetadataReport           { read, failed, skipped (gone, or a sample clip), cancelled, elapsed_ms }
 │           ├── struct SyncCallbacks            { on_progress, on_finished, on_metadata_progress, on_metadata_finished }: run on the worker thread
 │           └── class SyncWorker                hoardor-owned background sync thread
 │               ├── static start(db_file, SyncCallbacks, MountPointLister) -> Result<unique_ptr<SyncWorker>>   own connection; queues a startup sync if enabled
@@ -232,9 +235,13 @@ hoardor/
 │   │                                           track_columns/read_track, group_aggregates, order_sql, pending_sql, join/split (one value per line)
 │   │
 │   ├── video/
-│   │   ├── sources.hpp / sources.cpp           ns video::detail (internal): struct Described · read_nfo(file) / parse_nfo(text) (pugixml;
-│   │   │                                       <movie>, <episodedetails>, <tvshow>; Kodi URL tail cut) · from_name(file) (SxxEyy, NxNN,
-│   │   │                                       "Season N/NN - Title", "Title (Year)", "Title.Year.…") · season_of_folder(name) · clean_name(text)
+│   │   ├── sources.hpp / sources.cpp           ns video::detail (internal): struct Described (kind Movie/Episode/Show/Extra/Sample) ·
+│   │   │                                       read_nfo(file) / parse_nfo(text) (pugixml; <movie>, <episodedetails>, <tvshow>; Kodi URL tail cut) ·
+│   │   │                                       from_name(file, root) (samples, extras folders, SxxEyy / S01 - E01 / NxNN / Episode N / E01 /
+│   │   │                                       "[Group] Show - 01", "Season N/NN - Title", "Title (Year)", "Title.Year.…", a folder's year) ·
+│   │   │                                       season_of_folder(name) (also "Season 1 (1999-2000)", not ranges) · show_name(text, &year) ·
+│   │   │                                       is_extras_folder(name) · extras_folder(folders) · clean_name(text) (keeps "3.33");
+│   │   │                                       (internal) folders_of, title_of, episode_in, is_sample, show_from_folders
 │   │   ├── read.cpp                            video::read, video::embedded_poster; (internal) hdr_of, cover_attachment, pick_poster
 │   │   ├── frame.cpp                           video::grab_frame (libavcodec + libswscale); (internal) decode_at, brightness, to_rgb
 │   │   ├── plex.cpp                            video::PlexPosters; (internal) key_of, normalized, State::bundle/image (metadata://, upload://, media://)
@@ -307,7 +314,7 @@ hoardor/
 │       ├── playback.cpp                        file_resolver
 │       └── sync_worker.cpp                     SyncWorker::start / ~SyncWorker / request_sync / cancel / idle / wait_idle / run
 │
-├── tests/                                      GoogleTest (target hoardor_tests, 240 tests, run by ctest)
+├── tests/                                      GoogleTest (target hoardor_tests, 249 tests, run by ctest)
 │   ├── tsan.supp                               ThreadSanitizer suppressions: SQLite's lock-free WAL index (wal* functions only)
 │   ├── CMakeLists.txt                          GoogleTest 1.15.2 via FetchContent; gtest_discover_tests; run_tests target;
 │   │                                           HOARDOR_FFMPEG_TOOL (find_program ffmpeg, optional) for media fixtures
@@ -330,15 +337,17 @@ hoardor/
 │   │                                           CopiesInTwoQualitiesAreOneGroup, RemovingFilesRemovesTheirTracksAndUnusedNames,
 │   │                                           CategoryAndRootFilters, BadRequestsAreErrors
 │   ├── video/
-│   │   ├── sources_test.cpp                    7 TESTs: Nfo.{Movie, EpisodeAndShow, KodiUrlAfterTheXmlAndBrokenFiles, ReadsFromDiskIncludingUtf8},
-│   │   │                                       Names.{Episodes, Movies, SeasonFoldersAndCleaning}
+│   │   ├── sources_test.cpp                    12 TESTs: Nfo.{Movie, EpisodeAndShow, KodiUrlAfterTheXmlAndBrokenFiles, ReadsFromDiskIncludingUtf8},
+│   │   │                                       Names.{Episodes, Movies, SeasonFoldersAndCleaning, EpisodesFromReleaseLayouts, NotEpisodes,
+│   │   │                                       MovieYearFromItsFolder, ExtrasAndSamples, LooseSeasonFoldersAndShowNames}
 │   │   ├── read_test.cpp                       10 TESTs (VideoRead): StreamsLanguagesAndTags, HdrIsRecognized, NfoBeatsTagsAndNames_PosterIsPicked,
 │   │   │                                       EpisodeFromNamesWithTheShowsNfoAndPoster, MovieFromNameOnly, EmbeddedPosterAttachment, PosterNamedLikeTheMovie,
 │   │   │                                       EmbeddedPosterUnderOtherNamesButNeverAFont, NotAVideo; VideoCompanionPrefixes.TheFilesOwnNameThenTheCommonNames
-│   │   ├── library_test.cpp                    11 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
+│   │   ├── library_test.cpp                    14 TESTs (VideoLibraryTest): SearchTitlesShowsAndDirectors, OneCardPerMovieWhateverTheCopies, ShowsSeasonsAndEpisodes,
 │   │                                           DirectorsGenresAndWriters, PostersComeFromCompanionImagesThatStillExist, PendingAndErrorsAndStreams,
-│   │                                           MigrationThreeReadsEveryVideoAgain, PagingGroupsWithoutGapsOrRepeats, UnusedNamesAreRemoved,
-│   │                                           AGroupsFirstEntryIsItsFirstRealEpisode, NoDirectorOrNoGenreIsAFilterToo
+│   │                                           MigrationThreeReadsEveryVideoAgain, MigrationFourReadsEveryVideoAgain, PagingGroupsWithoutGapsOrRepeats,
+│   │                                           UnusedNamesAreRemoved, AGroupsFirstEntryIsItsFirstRealEpisode, NoDirectorOrNoGenreIsAFilterToo,
+│   │                                           AttachMakesSpecialsOfFilmsInAShowsOwnFolder, AttachNamesExtrasAfterTheirShowOrMovie
 │   │   ├── frame_test.cpp                      6 TESTs (VideoFrame): AScaledStillKeepsTheShape, NeverScaledUp, ADarkIntroIsSkipped,
 │   │   │                                       AllDarkStillGivesTheLastFrame, AnamorphicVideoIsWidened, AudioOnlyOrMissingFilesFail
 │   │   └── plex_test.cpp                       8 TESTs (PlexPostersTest, a fake Plex folder): AMoviesChosenPosterEvenUnderAnotherDriveLetter,
@@ -419,8 +428,9 @@ hoardor/
 │   │                                           MastersResolverSaysOfflineAndMissing, SubtitlesStartOnWithTheFirstFullTrack,
 │   │                                           SubtitlesFromAFileNextToTheVideoAndPreferredLanguagesWin, SubtitlesOffMeansNone
 │   └── master/
-│       ├── metadata_pass_test.cpp              8 TESTs (MetadataPassTest, real files): TwoDrivesSyncAndReadInParallel, OneDriveAtATimeWhenTheSettingSaysSo, ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
-│       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, EachMovieFindsItsPosterInAFlatFolder, CancelStopsThePassAndTheRestWaits
+│       ├── metadata_pass_test.cpp              9 TESTs (MetadataPassTest, real files): TwoDrivesSyncAndReadInParallel, OneDriveAtATimeWhenTheSettingSaysSo, ASyncRequestPausesThePassWhichThenResumes, ReadsAudioAfterASyncAndOnlyChangesNextTime,
+│       │                                       UnsettledFilesWaitForALaterSync, ReadsVideosWithTheirNfoAndPoster, EachMovieFindsItsPosterInAFlatFolder, CancelStopsThePassAndTheRestWaits,
+│       │                                       ShowsGetTheirEpisodesSpecialsAndExtrasAndSamplesAreSkipped
 │       └── sync_worker_test.cpp                8 TESTs (class SyncWorkerTest: a real DB file + .music(), .add_music_root(n), .set_settings(edit))
 │           └── SyncWorkerTest.*                RunsARequestedSyncInTheBackground, DuplicateRequestsAreIgnored,
 │                                               CancelStopsTheRunningSyncAndRemovesNothing, SyncOnStartupWhenEnabled, NoStartupSyncByDefault,

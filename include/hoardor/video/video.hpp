@@ -15,6 +15,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -31,8 +32,9 @@ struct Error {
 template <class T>
 using Result = std::expected<T, Error>;
 
-// Stored as numbers: never renumber.
-enum class Type : std::uint8_t { Movie = 1, Episode = 2 };
+// Stored as numbers: never renumber. An extra is a featurette, deleted scene, trailer, … found in
+// an extras folder; its `show` names the show or movie it belongs to (features/shows_and_extras.md).
+enum class Type : std::uint8_t { Movie = 1, Episode = 2, Extra = 3 };
 
 // Where the descriptive fields came from.
 enum class Source : std::uint8_t { Name = 1, Tags = 2, Nfo = 3 };
@@ -48,8 +50,8 @@ struct Stream {
 
 struct VideoInfo {
     Type type = Type::Movie;
-    std::string title;          // the movie's, or the episode's
-    std::string show;           // episodes
+    std::string title;          // the movie's, the episode's, or the extra's
+    std::string show;           // episodes; an extra: the show or movie it belongs to
     int season = -1, episode = 0;  // episodes; season 0 = specials, -1 = unknown
     int year = 0;
     std::string date;           // premiered / aired
@@ -68,9 +70,16 @@ struct VideoInfo {
     bool has_embedded_poster = false;
 };
 
+// read()'s error for a release's sample clip ("Sample/x.mkv", "x-sample.mkv"): it isn't opened
+// and is never listed. Store it with Library::store_error so it isn't read again.
+inline constexpr std::string_view sample_error = "a sample clip";
+
 // Opens the file (touches the drive). `companions` are the image and .nfo files next to it
-// and up to two folders up (file::Library::companions), nearest first.
-Result<VideoInfo> read(const std::filesystem::path& file, std::span<const std::filesystem::path> companions = {});
+// and up to two folders up (file::Library::companions), nearest first. `root` is the library
+// folder the file is in: names are read from the folders between it and the file (empty:
+// every folder up).
+Result<VideoInfo> read(const std::filesystem::path& file, std::span<const std::filesystem::path> companions = {},
+                       const std::filesystem::path& root = {});
 
 // The file-name prefixes of the companions read() can use, for file::Library::companions:
 // "<name>." and "<name>-poster." (the file's own .nfo and poster), then "poster.", "folder.",
@@ -135,7 +144,7 @@ using Value = std::variant<std::int64_t, std::string>;
 
 struct Condition {
     Field field;
-    Value value;  // Type: 1 movie, 2 episode
+    Value value;  // Type: 1 movie, 2 episode, 3 extra
     // Instead of `value`: items with nothing in this field (no director, no genre, an empty
     // text, 0), e.g. the "no director" section of a grid by director.
     bool none = false;
@@ -210,6 +219,16 @@ public:
                        EntryId poster_entry = 0);
     Result<void> store_error(EntryId entry, std::int64_t source_size, std::int64_t source_mtime_ns, std::string_view message);
     Result<std::uint64_t> remove_unused_names();
+
+    // After a folder's videos are read: ties what a file can't know alone to the other videos
+    // around it (features/shows_and_extras.md §3):
+    // - a movie named only by its file (no .nfo) in a folder that also holds a show's episodes
+    //   (deeper or next to it, but below the top of the root) becomes a special of that show:
+    //   an episode of season 0 ("DBZ/Dragon Ball Z/Movies/Movie 01.mkv");
+    // - an extra gets the name of what it belongs to: the show of the episodes under the folder
+    //   above its extras folder, else the movie there (the largest file), with its year.
+    // Returns how many videos changed. Reads the database only.
+    Result<std::uint64_t> attach(RootId root);
 
     Result<core::Page<Item>> items(const Filter& filter, std::span<const Order> order = {},
                                    const std::optional<core::Cursor>& after = std::nullopt, std::size_t limit = 200);

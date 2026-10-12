@@ -17,7 +17,13 @@ Not in scope:
 
 ## 2. Principles
 
-- **Movie or episode:** an `<episodedetails>` `.nfo`, a show or season tag, or an episode pattern in the name (`S01E02`, `1x02`, or a "Season N" folder) makes it an episode. Everything else is a movie. TYLI decides which category shows which.
+- **Movie, episode, or extra** (rules widened 2026-10-12, `features/shows_and_extras.md`):
+  - an extras folder below the top folder (`Featurettes`, `Extras`, `Deleted Scenes`, …) makes it an **extra** (`Type::Extra`), whatever else it says; its `show` names the show or movie it belongs to
+  - an `<episodedetails>` `.nfo`, a show or season tag, or an episode pattern in the name (`S01E02`, `1x02`, `S01 - E02`, `Episode 2`, `E02`, `[Group] Show - 02`, or a number in a season folder, also `Season 1 (1999-2000)`) makes it an **episode**
+  - a sample clip (`Sample/`, `…sample.mkv`) is never opened or listed (`sample_error`)
+  - everything else is a **movie**; a movie named only by its file, inside a show's own folder, becomes a **special** of that show (season 0) in `Library::attach`
+  - TYLI decides which category shows which
+- **Names come from the folders below the library folder only** (`read`'s `root`), cleaned of release words: "Breaking Bad (2008) Season 1-5 (1080p BluRay x265)" is "Breaking Bad".
 - **Posters:**
   - movies: `<name>-poster`, `poster`, `folder`, `cover`, `movie` in the movie's folder
   - episodes: the show's `poster`/`folder`/`cover` first (the shows grid), then the season's
@@ -29,10 +35,10 @@ Not in scope:
 ## 3. Current state
 
 - **Public API:** `include/hoardor/video/video.hpp`:
-  - `Type`, `Source`, `Stream`, `VideoInfo`, `read(path, companions)`, `companion_prefixes(path)`, `embedded_poster`
+  - `Type` (Movie, Episode, Extra since 2026-10-12), `Source`, `Stream`, `VideoInfo`, `read(path, companions, root)`, `sample_error`, `companion_prefixes(path)`, `embedded_poster`
   - `Frame`, `grab_frame(path, at, max_height)`, `PlexPosters` (`find_folder`, `open`, `poster`)
   - `Field`, `Condition` (a value, or `none`: "has nothing in this field", e.g. no director; since 2026-10-03), `Filter`, `Order`, `Item`, `Group` (with `first_entry`: the first real episode, or any copy of a movie), `GroupOrder`, `PendingEntry`
-  - `Library`: `open`, `pending`, `pending_count`, `store(…, poster_entry)`, `store_error`, `remove_unused_names`, `items`, `groups`, `count`, `group_count`, `item`
-- **Internal:** `src/video/sources.hpp` (`.nfo` parsing with pugixml; name parsing), tested directly.
-- **Tables:** `video_items`, `video_names`, `video_item_names`, `video_search` (video migrations 1–3, `DATABASE.md`). Migration 3 (2026-10-03) marks every item for one more read (the companion fix).
+  - `Library`: `open`, `pending`, `pending_count`, `store(…, poster_entry)`, `store_error`, `remove_unused_names`, `attach(root)` (specials and extras' owners, since 2026-10-12), `items`, `groups`, `count`, `group_count`, `item`
+- **Internal:** `src/video/sources.hpp` (`.nfo` parsing with pugixml; name parsing: `from_name(file, root)`, `season_of_folder`, `show_name`, `is_extras_folder`, `extras_folder`, `clean_name`), tested directly.
+- **Tables:** `video_items`, `video_names`, `video_item_names`, `video_search` (video migrations 1–4, `DATABASE.md`). Migrations 3 (2026-10-03, the companion fix) and 4 (2026-10-12, the new name rules) mark every item for one more read.
 - **Search** (since 2026-10-02): `Field::Search`, full-text over the `video_search` FTS5 table (migration 2).
