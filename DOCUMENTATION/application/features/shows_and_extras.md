@@ -1,6 +1,6 @@
 # Shows, specials, and extras from release layouts
 
-Status: **Built** (2026-10-12, branch `abhinavp06/PLAYLISTS`). Engines: `video` (names, `Library::attach`), `master` (calls it). TYLI side: `features/media_listing_ui.md` §7h.
+Status: **Shipped in `v0.4.0`** (2026-10-12, branch `abhinavp06/PLAYLISTS`). Engines: `video` (names, `Library::attach`), `master` (calls it). TYLI side: `features/media_listing_ui.md` §7h.
 
 ## 1. Why
 

@@ -298,7 +298,7 @@ Read as `playlists()`: pinned first, then `sort`, with each one's track count an
 | `file` | 3 | `v0.2.0` | Deletes the seeded Books category if it's untouched: name `Books`, kinds `text,image`, and no roots. One with folders or changed kinds stays (2026-10-03) |
 | `audio` | 3 | (v0.3.0) | `UPDATE audio_tracks SET source_size = -1 WHERE read_error = 'not a playable audio file'`: retries, once, what was rejected for an unknown length (a FLAC whose STREAMINFO says 0 samples), which reading accepts since 2026-10-03 |
 | `player` | 1 | (v0.3.0, Player) | `player_items` (with `player_items_recent` and the partial `player_items_liked`) and `player_settings` |
-| `player` | 3 | (v0.4.0, Playlists) | `player_playlists` and `player_playlist_items` with `player_playlist_items_order` and `player_playlist_items_entry` |
+| `player` | 3 | `v0.4.0` | `player_playlists` and `player_playlist_items` with `player_playlist_items_order` and `player_playlist_items_entry` |
 | `player` | 2 | (v0.3.0, 2026-10-03) | Deletes a stored `subtitles_on = 0`: subtitles became on by default, and the player had saved the old default with every volume change (no data lost: no one could have chosen it in TYLI yet) |
 | `video` | 3 | `v0.2.0` | `UPDATE video_items SET source_size = -1`: every video is read once more, because companions used to stop at the first 200 files of a folder and most movies in a big shared folder lost their poster and `.nfo` (2026-10-03). The rows stay listed until re-read |
 | `video` | 4 | `v0.4.0` | `UPDATE video_items SET source_size = -1`: every video is read once more with the widened name rules (more episode patterns, extras as type 3, samples skipped, cleaned show names; `features/shows_and_extras.md`, 2026-10-12). The rows stay listed until re-read |

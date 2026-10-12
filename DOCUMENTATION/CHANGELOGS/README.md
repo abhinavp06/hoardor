@@ -13,6 +13,7 @@ This folder is the detailed history of hoardor. Each version has its own file, s
 | Version | Date | Highlights |
 |---|---|---|
 | [Unreleased](unreleased.md) | — | Nothing yet |
+| [v0.4.0](v0.4.0.md) | 2026-10-12 | **Playlists and shows**: playlists and Liked Songs (player migration 3: pinned, the user's order, paged rows); shows from release layouts (more episode names, cleaned show names, extras as `Type::Extra`, a show's films as its specials, samples skipped; video migration 4) |
 | [v0.3.0](v0.3.0.md) | 2026-10-03 | **The player and posters**: a new `player` engine on libmpv (gapless queue, video frames, per-entry state, likes, subtitles on by default), Plex posters (read-only) and frame grabs, `Condition::none` and `Group::first_entry`, FLACs of unknown length accepted, clean under ASan and TSan |
 | [v0.2.0](v0.2.0.md) | 2026-10-03 | **Media library v1**: ffmpeg metadata in new `audio` and `video` engines (tags, streams, `.nfo`, posters), generic filter/order/group queries with keyset paging (`core`'s first component), FTS5 search, tag reading as a pausable job, one worker per physical drive, companions by name prefix, no default Books |
 | [v0.1.0](v0.1.0.md) | 2026-10-02 | **File Sync v1**: streaming scanner, `hoardor::db` on SQLite, library categories and roots (`.hoardor-root` markers, relocation), Sync with offline-safety rules, background `master::SyncWorker`, validated settings. Also: project docs, the doc structure (engines/features), per-version changelogs, the code tree, the `core` on-demand rule, and the first MSVC build |

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Engine built** (2026-10-03, player migration 3, 7 tests); the UI follows (TYLI `features/playlists_ui.md`). Approved 2026-10-03 ("okay with almost everything", with changes: §1a) |
+| Status | **Shipped in `v0.4.0`** (2026-10-12; built 2026-10-03, player migration 3, 7 tests), with the UI (TYLI `features/playlists_ui.md`). Approved 2026-10-03 ("okay with almost everything", with changes: §1a) |
 | Branch | `abhinavp06/PLAYLISTS` (both repos; started from `abhinavp06/PLAYER` while the `v0.3.0` PRs are open) |
 | Engine | `player` (it already keeps per-file likes; playlists are the user's other say in what plays) |
 
